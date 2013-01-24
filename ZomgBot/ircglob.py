@@ -1,4 +1,6 @@
 ﻿
+## taken from https://github.com/buttscicles/RedditBot/
+
 import re
 
 nick_user_host_re = r'^([^!@]+)!([^!@]+)@([^!@]+)$'
