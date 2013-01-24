@@ -5,6 +5,7 @@ import signal
 import os
 from ircglob import glob
 import string
+from ZomgBot import bot
 
 actually_quit = False
 
@@ -186,5 +187,5 @@ def run_zomgbot(server, port, nickname, channel):
     reactor.run()
 
 if __name__ == "__main__":
-    b = Bot('irc.gamesurge.net', 6667, '#llama', 'ZomgBot')
-    b.run()
+    bot.init('irc.gamesurge.net', 6667, '#llama', 'ZomgBot')
+    bot.run()
