@@ -152,12 +152,6 @@ class ZomgBotFactory(protocol.ClientFactory):
     def clientConnectionFailed(self, connector, reason):
         print "Could not connect: %s" % (reason)
 
-def killGroup():
-    global actually_quit
-    actually_quit = True
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-    os.kill(-os.getpgid(os.getpid()), signal.SIGINT)
-
 class Bot():
     @property
     def irc(self):
@@ -180,11 +174,6 @@ class Bot():
         self._factory = ZomgBotFactory(self.channel, self.nickname)
         reactor.connectTCP(self.server, self.port, self._factory)
         reactor.run()
-
-def run_zomgbot(server, port, nickname, channel):
-    reactor.connectTCP('irc.gamesurge.net', 6667, ZomgBotFactory(channel, nickname))
-    #reactor.addSystemEventTrigger('before', 'shutdown', killGroup)
-    reactor.run()
 
 if __name__ == "__main__":
     bot.init('irc.gamesurge.net', 6667, '#llama', 'ZomgBot')
