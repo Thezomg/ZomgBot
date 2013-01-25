@@ -5,7 +5,7 @@ import signal
 import os
 from ircglob import glob
 import string
-from ZomgBot import bot
+from ZomgBot.plugins.jsockplugin import JSockPlugin
 
 actually_quit = False
 
@@ -52,10 +52,21 @@ class ZomgBot(irc.IRCClient):
     nickname = property(_get_nickname)
 
     channels = dict()
+    jsock = None
 
     def signedOn(self):
+        self.jsock = JSockPlugin(self)
+        self.jsock.start()
         self.join(self.factory.channel)
         print "Signed on as %s" % (self.nickname,)
+
+    def send_message(self, channel, message, length=None):
+        message = str(message)
+        reactor.callFromThread(self.say, channel, message, length)
+
+    def _say(self, channel, message, length=None):
+        super(ZomgBot, self).say(channel, message, length)
+        print "saying %s" % message
 
     def getChannel(self, channel):
         channel = channel.lower()
@@ -153,6 +164,13 @@ class ZomgBotFactory(protocol.ClientFactory):
         print "Could not connect: %s" % (reason)
 
 class Bot():
+
+    def stop(self, quit_message="Asked to quit"):
+        actually_quit = True
+        self.irc.sendLine("QUIT :%s" % (quit_message))
+        self.irc.jsock.stop()
+        reactor.stop()
+
     @property
     def irc(self):
         return self._factory.client
@@ -176,5 +194,4 @@ class Bot():
         reactor.run()
 
 if __name__ == "__main__":
-    bot.init('irc.gamesurge.net', 6667, '#llama', 'ZomgBot')
-    bot.run()
+    print "Can't run directly"

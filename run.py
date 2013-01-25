@@ -1,14 +1,12 @@
 from ZomgBot import bot
 
-from twisted.internet import reactor
 from time import sleep
 import signal
 import sys
 
 def signal_handler(signal, frame):
     if bot and bot.irc:
-        bot.irc.sendLine("QUIT :CTRL+C at Console")
-        reactor.stop()
+        bot.stop()
     else:
         sys.exit(0)
 #    sleep(2)
