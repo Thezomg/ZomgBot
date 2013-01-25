@@ -6,11 +6,9 @@ import sys
 
 def signal_handler(signal, frame):
     if bot and bot.irc:
-        bot.stop()
+        bot.stop("CTRL-C from console")
     else:
         sys.exit(0)
-#    sleep(2)
-#    sys.exit(0)
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)

@@ -6,8 +6,7 @@ import os
 from ircglob import glob
 import string
 from ZomgBot.plugins.jsockplugin import JSockPlugin
-
-actually_quit = False
+from time import sleep
 
 class IRCUser():
     def __init__(self, name, op=False, voice=False):
@@ -63,6 +62,12 @@ class ZomgBot(irc.IRCClient):
     def send_message(self, channel, message, length=None):
         message = str(message)
         reactor.callFromThread(self.say, channel, message, length)
+
+    def quit(self, quit_message, callback=None):
+        irc.IRCClient.quit(self, quit_message)
+        #self.sendLine("QUIT :%s" % (quit_message))
+        if callback != None:
+            callback()
 
     def _say(self, channel, message, length=None):
         super(ZomgBot, self).say(channel, message, length)
@@ -154,26 +159,29 @@ class ZomgBotFactory(protocol.ClientFactory):
         return p
 
     def clientConnectionLost(self, connector, reason):
-        if not actually_quit:
+        if not self.client.actually_quit:
             print "Lost connection: %s" % reason.getErrorMessage()
             connector.connect()
         else:
             print "Asked to quit, doing so"
+            reactor.stop()
 
     def clientConnectionFailed(self, connector, reason):
         print "Could not connect: %s" % (reason)
 
 class Bot():
 
-    def stop(self, quit_message="Asked to quit"):
-        actually_quit = True
-        self.irc.sendLine("QUIT :%s" % (quit_message))
-        self.irc.jsock.stop()
-        reactor.stop()
-
     @property
     def irc(self):
         return self._factory.client
+
+    def stop(self, quit_message="Asked to quit"):
+        reactor.callFromThread(self._stop, quit_message)
+
+    def _stop(self, quit_message="Asked to quit"):
+        self.irc.actually_quit = True
+        self.irc.quit(quit_message)
+        self.irc.jsock.stop()
 
     _factory = None
 
