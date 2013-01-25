@@ -63,12 +63,6 @@ class ZomgBot(irc.IRCClient):
         message = str(message)
         reactor.callFromThread(self.say, channel, message, length)
 
-    def quit(self, quit_message, callback=None):
-        irc.IRCClient.quit(self, quit_message)
-        #self.sendLine("QUIT :%s" % (quit_message))
-        if callback != None:
-            callback()
-
     def _say(self, channel, message, length=None):
         super(ZomgBot, self).say(channel, message, length)
         print "saying %s" % message
