@@ -26,14 +26,14 @@ class PluginManager(object):
         for mod in glob(modpath):
             if path.basename(mod).startswith("__init__."): continue
             m = imp.load_source(path.splitext(path.basename(mod))[0], mod)
-        for plugin in self.plugins.values():
-            self.instances[plugin] = plugin(self)
+        self.ordered_enable("BanManager")
         self.events.dispatchEvent(name="PluginsLoaded", event=None)
         print self.instances
 
     def enable(self, plugin):
-        self.plugins[plugin.name] = plugin
-        plugin.setup()
+        plugin = self.plugins[plugin]
+        self.instances[plugin] = plugin(self)
+        self.instances[plugin].setup()
 
     def disable(self, plugin):
         if isinstance(plugin, basestring):
@@ -42,8 +42,11 @@ class PluginManager(object):
         del self.plugins[plugin.name]
 
     def ordered_enable(self, *plugins):
-        nodes = dict((plugin.name, plugin.plugin_info["depends"]) for plugin in self.plugins)
-        order = recursive_sort(nodes, free(nodes) & set(plugins))
+        nodes = [(plugin.name, tuple(plugin.plugin_info["depends"] or [])) for plugin in self.plugins.values()]
+        order = recursive_sort(nodes, set((plugin, d) for plugin, d in free(nodes) if plugin in plugins))
+        print "Resolved plugin load order: {}".format(', '.join(order))
+        for p in order:
+            self.enable(p)
 
 
 class Plugin(object):
@@ -56,8 +59,9 @@ class Plugin(object):
     @staticmethod
     def register(depends=None, provides=None):
         def inner(cls):
+            cls.name = cls.__module__.split(".")[-1]
             cls.plugin_info = {"depends": depends, "provides": provides}
-            PluginManager.instance.plugins[cls.__name__] = cls
+            PluginManager.instance.plugins[cls.name] = cls
 
             # handle tags we may have left in decorators
             for m in dict(inspect.getmembers(cls, inspect.ismethod)).values():
