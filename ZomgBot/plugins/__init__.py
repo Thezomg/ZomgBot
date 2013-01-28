@@ -30,6 +30,12 @@ class PluginManager(object):
         self.events.dispatchEvent(name="PluginsLoaded", event=None)
         print self.instances
 
+    def get_plugin(self, plugin_name):
+        if self.plugins.has_key(plugin_name):
+            if self.instances.has_key(self.plugins[plugin_name]):
+                return self.instances[self.plugins[plugin_name]]
+        return None
+
     def enable(self, plugin):
         plugin = self.plugins[plugin]
         self.instances[plugin] = plugin(self)
@@ -55,6 +61,7 @@ class Plugin(object):
     """
     def __init__(self, parent):
         self.events = parent.events
+        self.parent = parent
 
     @staticmethod
     def register(depends=None, provides=None):
