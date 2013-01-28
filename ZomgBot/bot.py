@@ -3,16 +3,21 @@ from twisted.internet import protocol, reactor
 from twisted.internet.error import ConnectionDone
 import signal
 import os
-from ircglob import glob
 import string
-from ZomgBot.plugins.jsockplugin import JSockPlugin
 from time import sleep
+from ircglob import glob
+from ZomgBot.plugins import PluginManager
+from ZomgBot.events import EventDispatcher, Event
 
 class IRCUser():
-    def __init__(self, name, op=False, voice=False):
+    def __init__(self, irc, name, op=False, voice=False):
+        self.irc = irc
         self.name = name
         self.op = op
         self.voice = voice
+    
+    def say(self, msg):
+        self.irc.say(self.name, msg)
 
     def __unicode__(self):
         return unicode(self.__repr__())
@@ -25,7 +30,8 @@ class IRCUser():
         return "%s%s%s" % ( ("@" if self.op else ""), ("+" if self.voice else ""), self.name)
 
 class IRCChannel():
-    def __init__(self, name):
+    def __init__(self, irc, name):
+        self.irc = irc
         self.name = name
         self.users = {}
 
@@ -35,7 +41,7 @@ class IRCChannel():
         return None
 
     def _addUser(self, name):
-        user = IRCUser(name)
+        user = IRCUser(self.irc, name)
         self.users[name] = user
         return user
 
@@ -44,18 +50,20 @@ class IRCChannel():
         if user == None:
             user = self._addUser(name)
         return user
+    
+    def say(self, msg):
+        self.irc.say(self.name, msg)
 
 class ZomgBot(irc.IRCClient):
     def _get_nickname(self):
         return self.factory.nickname
-    nickname = property(_get_nickname)
+    #nickname = property(_get_nickname)
+
+    actually_quit = False
 
     channels = dict()
-    jsock = None
 
     def signedOn(self):
-        self.jsock = JSockPlugin(self)
-        self.jsock.start()
         self.join(self.factory.channel)
         print "Signed on as %s" % (self.nickname,)
 
@@ -81,7 +89,7 @@ class ZomgBot(irc.IRCClient):
 
     def _addIRCChannel(self, channel):
         channel = channel.lower()
-        ch = IRCChannel(channel)
+        ch = IRCChannel(self, channel)
         self.channels[channel] = ch
         ch.users = {}
         return ch
@@ -114,7 +122,7 @@ class ZomgBot(irc.IRCClient):
 
             if ch:
                 for i in range(len(modes)):
-                    u = ch.getOrCreate(args[i])
+                    u = ch.getOrCreateUser(args[i])
                     if modes[i] == "o":
                         u.op = _set
                     if mode[i] == "v":
@@ -124,30 +132,41 @@ class ZomgBot(irc.IRCClient):
         if self.channels.has_key(channel.lower()):
             del self.channels[channel.lower()]
 
-        self._addIRCChannel(channel)
+        ch = self._addIRCChannel(channel)
+        self.events.dispatchEvent(name="IJoinChannel", event=ch)
         print "Joined %s" % (channel)
 
     def privmsg(self, user, channel, msg):
         info = glob.str_to_tuple(user)
-        ch = self.getChannel(channel)
-        u = ch.getOrCreateUser(info[0])
-        print "%s: <%s> %s" % (channel, u, msg,)
-
+        if channel[0] in self.supported.getFeature("chantypes", tuple('#&')):
+            ch = self.getChannel(channel)
+            u = ch.getOrCreateUser(info[0])
+            self.events.dispatchEvent(name="ChannelMsg", event=Event(channel=ch, user=u, message=msg))
+            print "%s: <%s> %s" % (channel, u, msg,)
+        elif channel == self.nickname:
+            self.events.dispatchEvent(name="PrivateMsg", event=Event(user=IRCUser(self, info[0]), message=msg))
+            print "<%s> %s" % (info[0], msg)
+        else:
+            print "Unrecognized target type: {}".format(channel)
 
 class ZomgBotFactory(protocol.ClientFactory):
     protocol = ZomgBot
     _protocol = None
+
     @property
     def client(self):
         return self._protocol
 
-    def __init__(self, channel='#llama', nickname='ZomgBot'):
+    def __init__(self, parent, channel='#llama5', nickname='ZomgBot'):
+        self.parent = parent
         self.channel = channel
         self.nickname = nickname
 
     def buildProtocol(self, addr):
         p = self.protocol()
+        p.nickname = self.nickname
         p.factory = self
+        p.events = self.parent.events
         #p.init()
         self._protocol = p
         return p
@@ -175,7 +194,6 @@ class Bot():
     def _stop(self, quit_message="Asked to quit"):
         self.irc.actually_quit = True
         self.irc.quit(quit_message)
-        self.irc.jsock.stop()
 
     _factory = None
 
@@ -190,8 +208,13 @@ class Bot():
         self.channel = channel
         self.nickname = nickname
 
+        self.events = EventDispatcher("fred")
+
+        self.plugins = PluginManager(self)
+        self.plugins.load_plugins("ZomgBot.plugins")
+
     def run(self):
-        self._factory = ZomgBotFactory(self.channel, self.nickname)
+        self._factory = ZomgBotFactory(self, self.channel, self.nickname)
         reactor.connectTCP(self.server, self.port, self._factory)
         reactor.run()
 
