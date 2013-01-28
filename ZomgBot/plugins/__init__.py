@@ -26,7 +26,7 @@ class PluginManager(object):
         for mod in glob(modpath):
             if path.basename(mod).startswith("__init__."): continue
             m = imp.load_source(path.splitext(path.basename(mod))[0], mod)
-        self.ordered_enable("BanManager")
+        self.ordered_enable("ban_manager")
         self.events.dispatchEvent(name="PluginsLoaded", event=None)
         print self.instances
 
@@ -49,7 +49,7 @@ class PluginManager(object):
 
     def ordered_enable(self, *plugins):
         nodes = [(plugin.name, tuple(plugin.plugin_info["depends"] or [])) for plugin in self.plugins.values()]
-        order = recursive_sort(nodes, set((plugin, d) for plugin, d in free(nodes) if plugin in plugins))
+        order = recursive_sort(nodes, set((plugin, d) for plugin, d in free(nodes) if self.plugins[plugin].name in plugins))
         print "Resolved plugin load order: {}".format(', '.join(order))
         for p in order:
             self.enable(p)
