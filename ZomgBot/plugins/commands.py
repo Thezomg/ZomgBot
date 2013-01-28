@@ -16,7 +16,7 @@ class CommandContext(object):
         self.args = msg[1:].split(' ')
         return self.args.pop(0)
 
-@Plugin.register(depends=None, provides=None)
+@Plugin.register(depends=None)
 class Commands(Plugin):
     @EventHandler("PluginsLoaded")
     def handle_reload(self, event):

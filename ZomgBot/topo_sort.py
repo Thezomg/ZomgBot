@@ -1,3 +1,16 @@
+
+class CyclicalDependencyError(Exception):
+    """
+    Thrown when a circular loop of dependencies exists.
+    """
+    pass
+
+class UnmetDependencyError(Exception):
+    """
+    Thrown when a plugin depends on a plugin name that is not present.
+    """
+    pass
+
 def free(nodelist):
     """
     return all nodes n from nodelist which have no edges x->n
@@ -24,20 +37,24 @@ def recursive_sort(nodelist, initial=None):
         if n in stack:
             # error condition
             l = stack[stack.index(n):] + [n]
-            raise Exception('Cycle: ' + '->'.join(l))
+            raise CyclicalDependencyError('Cycle: ' + '->'.join(l))
         elif not n in visited:
             stack.append(n)
             depends = [(k, v) for k, v in nodelist if k in d]
             unmet = list(set(d) - set(k for k, v in depends))
             if unmet:
-                raise Exception('Unmet dependencies: ' + ', '.join(unmet))
+                raise UnmetDependencyError('Unmet dependencies: ' + ', '.join(unmet))
             for node in depends:
                 visit(node, stack)
             stack[:] = stack[:-1]
             sorted.append(n)
             visited.add(n)
-    for k, v in free:
-        visit((k, v))
+    for k, v in initial:
+        try:
+            visit((k, v))
+        except e:
+            print "WARNING: {} will not be loaded due to an error:".format(k)
+            print e
     if nodelist and not sorted:
         # just visit any node so we report a cycle
         visit(nodelist[0])

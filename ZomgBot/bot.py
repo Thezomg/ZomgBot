@@ -157,7 +157,7 @@ class ZomgBotFactory(protocol.ClientFactory):
     def client(self):
         return self._protocol
 
-    def __init__(self, parent, channel='#llama5', nickname='ZomgBot'):
+    def __init__(self, parent, channel='#llama', nickname='ZomgBot'):
         self.parent = parent
         self.channel = channel
         self.nickname = nickname
