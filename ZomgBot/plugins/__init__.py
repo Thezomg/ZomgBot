@@ -45,6 +45,8 @@ class PluginManager(object):
         if isinstance(plugin, basestring):
             return self.disable(self.plugins[plugin])
         plugin.teardown()
+        self.events.unregisterHandlers(plugin)
+
         del self.plugins[plugin.name]
 
     def ordered_enable(self, *plugins):
@@ -98,6 +100,12 @@ class _Annotation(object):
     
     def get_by_name(self, k):
         return dict((fn.__name__, fn) for fn in self.get(k))
+
+    def forgetPlugin(self, plugin):
+        self.all = dict((k, [f for f in v if f.plugin != plugin]) for k, v in self.all)
+
+    def forgetEverything(self):
+        self.all = {}
 
     def __getattr__(self, k):
         def wrapper(*args, **kwargs):
