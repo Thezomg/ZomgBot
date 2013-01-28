@@ -1,7 +1,7 @@
 from ZomgBot.plugins import Plugin, Modifier
 from ZomgBot.events import EventHandler
 
-@Plugin.register(depends=None, provides=None)
+@Plugin.register(depends=["commands"])
 class BanManager(Plugin):
     @Modifier.command("ban", permission="channel.admin")
     def ban(self, context, target):
