@@ -4,35 +4,100 @@ from twisted.internet.error import ConnectionDone
 import signal
 import os
 import string
+from copy import copy
 from time import sleep
 from ircglob import glob
 from ZomgBot.plugins import PluginManager, Modifier
 from ZomgBot.events import EventDispatcher, Event
 
-class IRCUser():
-    def __init__(self, irc, name, op=False, voice=False):
-        self.irc = irc
-        self.name = name
-        self.op = op
-        self.voice = voice
-    
-    def say(self, msg):
-        self.irc.say(self.name, msg)
-
-    def __unicode__(self):
-        return unicode(self.__repr__())
-
-    def _get_display(self):
-        return "%s%s%s" % ( ("@" if self.op else ""), ("+" if self.voice else ""), self.name)
-    display = property(_get_display)
-
-    def __repr__(self):
-        return "%s%s%s" % ( ("@" if self.op else ""), ("+" if self.voice else ""), self.name)
-
-class IRCChannel():
+class IRCTarget(object):
     def __init__(self, irc, name):
         self.irc = irc
         self.name = name
+
+    def say(self, msg):
+        self.irc.say(self.name, msg)
+
+    def notice(self, msg):
+        self.irc.notice(self.name, msg)
+
+    @property
+    def display_name(self):
+        return self.name
+    
+    def __str__(self):
+        return self.display_name
+    
+    def __repr__(self):
+        return self.display_name
+
+    def __unicode__(self):
+        return unicode(self.display_name)
+
+class IRCUser(IRCTarget):
+    account = None
+    username = None
+    hostname = None
+
+    def __init__(self, irc, name):
+        if '!' in name:
+            name, self.username, self.hostname = glob.str_to_tuple(name)[0]
+        super(IRCUser, self).__init__(irc, name)
+        self.channels = set()
+
+    def set_account(self, account):
+        self.account = account
+
+    def add_channel(self, channel):
+        self.channels.add(channel)
+        channel.getOrCreateUser(self.name)
+
+    def remove_channel(self, channel):
+        self.channels.remove(channel)
+        del channel.users[self.name.lower()]
+
+    def nick_changed(self, newnick):
+        print "*** {} is now known as {}".format(self.name, newnick)
+        self.irc.users[newnick.lower()] = self
+        del self.irc.users[self.name.lower()]
+        for ch in self.channels:
+            ch.users[newnick.lower()] = ch.users[self.name.lower()]
+            del ch.users[self.name.lower()]
+        print "updated nick in {} channels: {}".format(len(self.channels), ', '.join(list(n.name for n in self.channels)))
+        self.name = newnick
+
+
+class IRCUserInChannel(object):
+    def __init__(self, user):
+        self.user = user
+        self.op = False
+        self.voice = False
+
+    @property
+    def display_name(self):
+        return self.prefix + self.user.display_name
+    
+    @property
+    def prefix(self):
+        if self.op: return '@'
+        if self.voice: return '+'
+        return ''
+
+    def __str__(self):
+        return self.display_name
+
+    def __repr__(self):
+        return self.display_name
+
+    def __unicode__(self):
+        return unicode(self.display_name)
+    
+    def __getattr__(self, k):
+        return getattr(self.user, k)
+
+class IRCChannel(IRCTarget):
+    def __init__(self, irc, name):
+        super(IRCChannel, self).__init__(irc, name)
         self.users = {}
 
     def getUser(self, name):
@@ -41,18 +106,17 @@ class IRCChannel():
         return None
 
     def _addUser(self, name):
-        user = IRCUser(self.irc, name)
+        user = IRCUserInChannel(self.irc.getOrCreateUser(name))
         self.users[name] = user
         return user
 
     def getOrCreateUser(self, name):
         user = self.getUser(name)
-        if user == None:
+        if user is None:
             user = self._addUser(name)
+            user.user.add_channel(self)
+        print self.getUser(name)
         return user
-    
-    def say(self, msg):
-        self.irc.say(self.name, msg)
 
 class ZomgBot(irc.IRCClient):
     def _get_nickname(self):
@@ -61,7 +125,9 @@ class ZomgBot(irc.IRCClient):
 
     actually_quit = False
 
-    channels = dict()
+    def __init__(self):
+        self.channels = {}
+        self.users = {}
 
     def signedOn(self):
         self.join(self.factory.channel)
@@ -75,15 +141,41 @@ class ZomgBot(irc.IRCClient):
         super(ZomgBot, self).say(channel, message, length)
         print "saying %s" % message
 
+    @staticmethod
+    def getNick(user):
+        return glob.str_to_tuple(user)[0]
+
+    def getUser(self, user):
+        user = self.getNick(user.lower())
+        if user in self.users:
+            return self.users[user]
+        return None
+    
+    def getOrCreateUser(self, user):
+        u = self.getUser(user)
+        if u is None:
+            u = self._addIRCUser(user)
+        return u
+
+    def deleteUser(self, user):
+        if self.getUser(user):
+            del self.users[self.getNick(user.lower())]
+
+    def _addIRCUser(self, user):
+        user = self.getNick(user)
+        u = IRCUser(self, user)
+        self.users[user.lower()] = u
+        return u
+
     def getChannel(self, channel):
         channel = channel.lower()
-        if self.channels.has_key(channel):
+        if channel in self.channels:
             return self.channels[channel]
         return None
 
     def getOrCreateChannel(self, channel):
         ch = self.getChannel(channel)
-        if ch == None:
+        if ch is None:
             ch = self._addIRCChannel(channel)
         return ch
 
@@ -91,7 +183,6 @@ class ZomgBot(irc.IRCClient):
         channel = channel.lower()
         ch = IRCChannel(self, channel)
         self.channels[channel] = ch
-        ch.users = {}
         return ch
 
     def irc_RPL_NAMREPLY(self,prefix,params):
@@ -111,9 +202,16 @@ class ZomgBot(irc.IRCClient):
             user = ch.getOrCreateUser(username)
             user.voice = voice
             user.op = op
+            print "{} {} {}".format(voice, op, user)
 
     #def irc_unknown(self, prefix, command, params):
         #print "unknown message from IRCserver. prefix: %s, command: %s, params: %s" % (prefix, command, params)
+
+    def irc_330(self, prefix, params):
+        self.events.dispatchEvent(name="WhoisAccount", event=Event(user=self.getOrCreateUser(params[1]), account=params[2]))
+
+    def irc_RPL_ENDOFWHOIS(self, prefix, params):
+        self.events.dispatchEvent(name="WhoisEnd", event=Event(user=self.getOrCreateUser(params[1])))
 
     def modeChanged(self, user, channel, _set, modes, args):
         if channel.startswith("#"):
@@ -125,8 +223,28 @@ class ZomgBot(irc.IRCClient):
                     u = ch.getOrCreateUser(args[i])
                     if modes[i] == "o":
                         u.op = _set
-                    if mode[i] == "v":
+                    if modes[i] == "v":
                         u.voice = _set
+
+    def userRenamed(self, oldname, newname):
+        print oldname, newname
+        self.getOrCreateUser(oldname).nick_changed(newname)
+
+    def userLeft(self, user, channel):
+        ch = self.getOrCreateChannel(channel)
+        u = self.getOrCreateUser(user)
+        u.remove_channel(ch)
+        if not u.channels:
+            self.deleteUser(user)
+
+    def userJoined(self, user, channel):
+        ch = self.getOrCreateChannel(channel)
+        self.getOrCreateUser(user).add_channel(ch)
+    
+    def userQuit(self, user, quitMessage):
+        u = self.getOrCreateUser(user)
+        map(u.remove_channel, copy(u.channels))
+        self.deleteUser(user)
 
     def joined(self, channel):
         if self.channels.has_key(channel.lower()):

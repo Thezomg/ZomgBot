@@ -74,7 +74,7 @@ class Plugin(object):
         for m in dict(inspect.getmembers(self, inspect.ismethod)).values():
             if not hasattr(m.__func__, "event"): continue # not an event handler
             for event, priority in m.__func__.event:
-                PluginManager.instance.events.addEventHandler(m.__func__.plugin, event, m)
+                PluginManager.instance.events.addEventHandler(m.__func__.plugin, event, m, priority=priority)
 
     @staticmethod
     def register(depends=None, provides=None):

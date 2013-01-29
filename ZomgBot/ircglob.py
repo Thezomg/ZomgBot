@@ -31,7 +31,7 @@ class glob(object):
         '''Convert a "nick!user@host" to (nick, user, host)'''
         match = re.match(nick_user_host_re, nick_user_host, re.I)
         if not match:
-            return False
+            return (nick_user_host, None, None)
         return match.groups()
 
     @staticmethod

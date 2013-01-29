@@ -1,5 +1,5 @@
 from ZomgBot.plugins import Plugin, Modifier
-from ZomgBot.events import EventHandler
+from ZomgBot.events import Event, EventHandler
 
 class CommandContext(object):
     def __init__(self, user, channel):
@@ -16,7 +16,7 @@ class CommandContext(object):
         self.args = msg[1:].split(' ')
         return self.args.pop(0)
 
-@Plugin.register(depends=None)
+@Plugin.register(depends=["auth"])
 class Commands(Plugin):
     @EventHandler("PluginsLoaded")
     def handle_reload(self, event):
@@ -26,24 +26,32 @@ class Commands(Plugin):
             [self.commands.update({n: cmd}) for n in cmd.annotation["command"].get("aliases", []) + [cmd.annotation["command"]["args"][0]]]
         print self.commands
 
-    def do_command(self, name, context):
-        print "Trying to execute {}".format(name)
+    def _really_do_command(self, auth_result, name, context):
         if name in self.commands:
             self.commands[name].call_with_self(context)
         else:
             context.reply("No such command, try another one you retard.")
 
+    def do_command(self, name, context):
+        print "Trying to execute {}".format(name)
+        r = self.events.dispatchEvent(name="AuthenticateUser", event=Event(user=context.user.user, irc=context.user.irc))
+        r.addCallback(self._really_do_command, name, context)
+
     @EventHandler("ChannelMsg")
     def handle_commands(self, event):
+        print event
         if not event.message.startswith('/'): return
         context = CommandContext(event.user, event.channel)
         command = context.parse_args(event.message)
         self.do_command(command, context)
 
-    @Modifier.command("derp")
-    def cmd_derp(self, context):
-        context.reply("hello, {}!".format(context.user))
+    @EventHandler("PrivateMsg")
+    def handle_private(self, event):
+        if not event.message.startswith('/'): return
+        context = CommandContext(event.user, None)
+        command = context.parse_args(event.message)
+        self.do_command(command, context)
 
-    @Modifier.command("test")
-    def cmd_test(self, context):
-        context.reply("after reload!")
+    @Modifier.command("mystatus")
+    def cmd_mystatus(self, context):
+        context.reply("You are {}, ".format(context.user) + ("logged in as {}".format(context.user.account) if context.user.account else "not logged in"))
