@@ -1,8 +1,8 @@
 from ZomgBot.plugins import Plugin, Modifier
 from ZomgBot.events import EventHandler
 
-mc_ban_provider = "MCBouncer"
-chan_ban_provider = "ChannelBanProvider"
+mc_ban_provider = "mcbouncer"
+chan_ban_provider = "channelbanprovider"
 
 @Plugin.register(depends=["commands"])
 class BanManager(Plugin):
