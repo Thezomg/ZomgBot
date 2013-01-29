@@ -9,8 +9,8 @@ DEFAULT = {
         "ssl":      False,
     },
     "bot": {
-        "admins":   ["edk141"],
-        "plugins":  ["ban_manager"],
+        "admins":   ["edk141", "Deaygo"],
+        "plugins":  ["ban_manager", "mcbouncer"],
     },
 }
 
