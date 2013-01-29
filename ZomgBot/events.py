@@ -11,7 +11,7 @@ class EventDispatcher(object):
             method(event)
     
     def addEventHandler(self, plugin, event, method):
-        print "{} adding handler for {}: {}".format(self.name, event, method)
+        print "{} adding handler for {} in {}: {}".format(self.name, event, plugin, method)
         self.handlers.setdefault(event, set())
         self.handlers[event].add((plugin, method))
 
@@ -19,7 +19,8 @@ class EventDispatcher(object):
         handlers = {}
 
     def unregisterHandlers(self, plugin):
-        handlers = [(k, set(h for h in handlerSet if h[0] != plugin)) for k, handlerSet in self.handlers.items()]
+        print "{} removing handlers for {}".format(self.name, plugin)
+        self.handlers = dict((k, set(h for h in handlerSet if h[0] != plugin)) for k, handlerSet in self.handlers.items())
 
 class Event(dict):
     def __getattr__(self, k):

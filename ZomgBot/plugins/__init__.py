@@ -42,7 +42,7 @@ class PluginManager(object):
         self.instances[plugin].setup()
 
     def disableAll(self):
-        for p in self.instances:
+        for p in self.instances.values():
             self.disable(p)
         self.instances = {}
 
@@ -51,7 +51,7 @@ class PluginManager(object):
             return self.disable(self.plugins[plugin])
         print plugin
         plugin.teardown()
-        self.events.unregisterHandlers(plugin)
+        self.events.unregisterHandlers(plugin.__class__)
         del self.plugins[plugin.name]
 
     def ordered_enable(self, *plugins):
