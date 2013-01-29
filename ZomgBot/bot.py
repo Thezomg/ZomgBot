@@ -208,8 +208,8 @@ class Bot():
     def reload(self):
         #self.plugins = PluginManager(self)
         self.plugins.disableAll()
-        self.plugins.load_plugins("ZomgBot.plugins")
         Modifier.forgetEverything()
+        self.plugins.load_plugins("ZomgBot.plugins")
 
     def init(self, cfg):
         self.server = cfg["irc"]["server"]
