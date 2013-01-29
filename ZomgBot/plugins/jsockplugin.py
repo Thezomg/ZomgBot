@@ -77,7 +77,7 @@ class JSockPlugin(Plugin):
         print "Got function %s" % (function)
         if function == "say":
             print "sending message"
-            self.send_message('#llama5', 'function called, %s(%s)' % (function, ', '.join(args)))
+            self.send_message('#llama5', '%s' % (', '.join(args)))
 
     @Modifier.command("jsock")
     def jsock_command(self, context):
