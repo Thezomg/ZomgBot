@@ -96,6 +96,17 @@ class Plugin(object):
     def teardown(self):
         pass
 
+    def get_config(self):
+        if not self.parent.parent.config.has_key("plugins"):
+            self.parent.parent.config["plugins"] = dict()
+        if not self.parent.parent.config["plugins"].has_key(self.name):
+            self.parent.parent.config["plugins"][self.name] = dict()
+        return self.parent.parent.config["plugins"][self.name]
+
+    def save_config(self):
+        self.parent.parent.config.save()
+
+
 
 class _Annotation(object):
     def __init__(self):

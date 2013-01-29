@@ -47,3 +47,9 @@ class Commands(Plugin):
     @Modifier.command("test")
     def cmd_test(self, context):
         context.reply("after reload!")
+
+    @Modifier.command("yaml")
+    def cmd_yamltest(self, context):
+        self.get_config()['storage'] = 'testing'
+        self.save_config()
+        context.reply("setting key specific to this plugin")
