@@ -55,3 +55,9 @@ class Commands(Plugin):
     @Modifier.command("mystatus")
     def cmd_mystatus(self, context):
         context.reply("You are {}, ".format(context.user) + ("logged in as {}".format(context.user.account) if context.user.account else "not logged in"))
+
+    @Modifier.command("yaml")
+    def cmd_yamltest(self, context):
+        self.get_config()['storage'] = 'testing'
+        self.save_config()
+        context.reply("setting key specific to this plugin")

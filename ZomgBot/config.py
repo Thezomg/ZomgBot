@@ -19,6 +19,10 @@ class Config(dict):
         self.update(init)
         self.filename = fn
 
+    def save(self):
+        with open(self.filename, 'w') as f:
+            yaml.dump(dict(**self), f, default_flow_style=False)
+
     def _load(self):
         with open(self.filename, 'r') as f:
             self.update(yaml.load(f))
