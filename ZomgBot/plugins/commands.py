@@ -43,3 +43,7 @@ class Commands(Plugin):
     @Modifier.command("derp")
     def cmd_derp(self, context):
         context.reply("hello, {}!".format(context.user))
+
+    @Modifier.command("test")
+    def cmd_test(self, context):
+        context.reply("after reload!")

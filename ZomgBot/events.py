@@ -15,6 +15,9 @@ class EventDispatcher(object):
         self.handlers.setdefault(event, set())
         self.handlers[event].add((plugin, method))
 
+    def unregisterAll(self):
+        handlers = {}
+
     def unregisterHandlers(self, plugin):
         handlers = [(k, set(h for h in handlerSet if h[0] != plugin)) for k, handlerSet in self.handlers.items()]
 

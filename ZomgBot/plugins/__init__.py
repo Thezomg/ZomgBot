@@ -41,12 +41,17 @@ class PluginManager(object):
         self.instances[plugin] = plugin(self)
         self.instances[plugin].setup()
 
+    def disableAll(self):
+        for p in self.instances:
+            self.disable(p)
+        self.instances = {}
+
     def disable(self, plugin):
         if isinstance(plugin, basestring):
             return self.disable(self.plugins[plugin])
+        print plugin
         plugin.teardown()
         self.events.unregisterHandlers(plugin)
-
         del self.plugins[plugin.name]
 
     def ordered_enable(self, *plugins):
@@ -88,6 +93,9 @@ class Plugin(object):
         return inner
 
     def setup(self):
+        pass
+
+    def teardown(self):
         pass
 
 

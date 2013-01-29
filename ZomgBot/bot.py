@@ -6,7 +6,7 @@ import os
 import string
 from time import sleep
 from ircglob import glob
-from ZomgBot.plugins import PluginManager
+from ZomgBot.plugins import PluginManager, Modifier
 from ZomgBot.events import EventDispatcher, Event
 
 class IRCUser():
@@ -141,8 +141,11 @@ class ZomgBot(irc.IRCClient):
         if channel[0] in self.supported.getFeature("chantypes", tuple('#&')):
             ch = self.getChannel(channel)
             u = ch.getOrCreateUser(info[0])
-            self.events.dispatchEvent(name="ChannelMsg", event=Event(channel=ch, user=u, message=msg))
-            print "%s: <%s> %s" % (channel, u, msg,)
+            if msg == "/reload":
+                self.factory.parent.reload()
+            else:
+                self.events.dispatchEvent(name="ChannelMsg", event=Event(channel=ch, user=u, message=msg))
+                print "%s: <%s> %s" % (channel, u, msg,)
         elif channel == self.nickname:
             self.events.dispatchEvent(name="PrivateMsg", event=Event(user=IRCUser(self, info[0]), message=msg))
             print "<%s> %s" % (info[0], msg)
@@ -201,6 +204,12 @@ class Bot():
     port = None
     channel = None
     nickname = None
+
+    def reload(self):
+        #self.plugins = PluginManager(self)
+        self.plugins.disableAll()
+        self.plugins.load_plugins("ZomgBot.plugins")
+        Modifier.forgetEverything()
 
     def init(self, server, port, channel, nickname):
         self.server = server
