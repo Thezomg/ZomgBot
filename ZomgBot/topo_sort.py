@@ -29,6 +29,7 @@ def recursive_sort(nodelist, initial=None):
     """
     recursive (depth-first) topological sort of nodelist
     """
+    print "xx", nodelist, initial
     sorted = []
     visited = set()
     if initial is None:
@@ -55,7 +56,7 @@ def recursive_sort(nodelist, initial=None):
         except e:
             print "WARNING: {} will not be loaded due to an error:".format(k)
             print e
-    if nodelist and not sorted:
+    if initial and nodelist and not sorted:
         # just visit any node so we report a cycle
         visit(nodelist[0])
     return sorted
