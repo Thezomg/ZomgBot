@@ -211,11 +211,13 @@ class Bot():
         self.plugins.load_plugins("ZomgBot.plugins")
         Modifier.forgetEverything()
 
-    def init(self, server, port, channel, nickname):
-        self.server = server
-        self.port = port
-        self.channel = channel
-        self.nickname = nickname
+    def init(self, cfg):
+        self.server = cfg["irc"]["server"]
+        self.port =   cfg["irc"]["port"]
+        self.channel = cfg["irc"]["channels"][0]
+        self.nickname = cfg["irc"]["nick"]
+
+        self.config = cfg
 
         self.events = EventDispatcher("fred")
 

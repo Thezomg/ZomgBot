@@ -1,4 +1,5 @@
 from ZomgBot import bot
+from ZomgBot.config import Config
 
 from twisted.internet import reactor
 from time import sleep
@@ -15,5 +16,9 @@ def signal_handler(signal, frame):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
-    bot.init('irc.gamesurge.net', 6667, '#llama5', 'ZomgBot')
+
+    config = Config()
+    config.loadOrCreate()
+
+    bot.init(config)
     bot.run()

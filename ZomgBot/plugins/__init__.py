@@ -18,6 +18,7 @@ class PluginManager(object):
     instance = None
 
     def __init__(self, parent):
+        self.parent = parent
         self.events = parent.events
         PluginManager.instance = self
 
@@ -26,7 +27,7 @@ class PluginManager(object):
         for mod in glob(modpath):
             if path.basename(mod).startswith("__init__."): continue
             m = imp.load_source(path.splitext(path.basename(mod))[0], mod)
-        self.ordered_enable("ban_manager")
+        self.ordered_enable(*self.parent.config["bot"]["plugins"])
         self.events.dispatchEvent(name="PluginsLoaded", event=None)
         print self.instances
 
@@ -57,7 +58,7 @@ class PluginManager(object):
     def ordered_enable(self, *plugins):
         nodes = [(plugin.name, tuple(plugin.plugin_info["depends"] or [])) for plugin in self.plugins.values()]
         order = recursive_sort(nodes, set((plugin, d) for plugin, d in free(nodes) if self.plugins[plugin].name in plugins))
-        print "Resolved plugin load order: {}".format(', '.join(order))
+        print "{}: Resolved plugin load order: {}".format(plugins, ', '.join(order))
         for p in order:
             self.enable(p)
 
@@ -70,6 +71,11 @@ class Plugin(object):
         self.events = parent.events
         self.parent = parent
 
+        for m in dict(inspect.getmembers(self, inspect.ismethod)).values():
+            if not hasattr(m.__func__, "event"): continue # not an event handler
+            for event, priority in m.__func__.event:
+                PluginManager.instance.events.addEventHandler(m.__func__.plugin, event, m)
+
     @staticmethod
     def register(depends=None, provides=None):
         def inner(cls):
@@ -81,15 +87,7 @@ class Plugin(object):
             for m in dict(inspect.getmembers(cls, inspect.ismethod)).values():
                 if not hasattr(m.__func__, "plugin"): continue  # we don't care
                 m.__func__.plugin = cls
-
-                if not hasattr(m.__func__, "event"): continue # not an event handler
-                for event, priority in m.__func__.event:
-                    def unfuck(m):  # we need a variable per iteration (i.e. m) in order to close over it
-                        @wraps(m)
-                        def wrapper(*a, **kw):
-                            return m.__func__(PluginManager.instance.instances[cls], *a, **kw)
-                        return wrapper
-                    PluginManager.instance.events.addEventHandler(m.__func__.plugin, event, unfuck(m))
+                
         return inner
 
     def setup(self):
@@ -104,7 +102,7 @@ class _Annotation(object):
         self.all = {}
 
     def get(self, k):
-        return self.all.get(k, [])
+        return [fn for fn in self.all.get(k, []) if fn.plugin in PluginManager.instance.instances]
     
     def get_by_name(self, k):
         return dict((fn.__name__, fn) for fn in self.get(k))
