@@ -96,6 +96,9 @@ class Plugin(object):
     def teardown(self):
         pass
 
+    def send_message(self, target, message):
+        self.parent.parent.irc.send_message(target, message)
+
     def get_config(self):
         cfg = self.parent.parent.config
         cfg.setdefault("plugins", {})

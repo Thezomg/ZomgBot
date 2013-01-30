@@ -3,6 +3,9 @@ import jsocket
 import socket
 import logging
 
+from ZomgBot.plugins import Plugin, Modifier
+from ZomgBot.events import Event, EventHandler
+
 logger = logging.getLogger("jsocket")
 logger.setLevel(logging.ERROR)
 
@@ -48,25 +51,43 @@ class ServerFactoryWithCallback(jsocket.ServerFactory):
         self._wait_to_exit()
         self.close()
 
-class JSockPlugin():
+@Plugin.register(depends=["commands"])
+class JSockPlugin(Plugin):
     server = None
     bot = None
 
-    def __init__(self, bot, port=5489, timeout=2.0):
-        self.bot = bot
-        self.server = ServerFactoryWithCallback(JSockFactoryThread, callback=self.function_received, port=port)
-        self.server.timeout = timeout
+    @EventHandler("PluginsLoaded")
+    def handle_reload(self, event):
+        self.auto_load = self.get_config().get("auto_load", False)
+        self.port = self.get_config().get('port', 5489)
+        self.timeout = self.get_config().get('timeout', 2.0)
+        self.get_config()['port'] = self.port
+        self.get_config()['timeout'] = self.timeout
+        self.get_config()['auto_load'] = self.auto_load
+        self.save_config()
+        if self.auto_load:
+            self._start_server()
+
+    def _start_server(self):
+        self.server = ServerFactoryWithCallback(JSockFactoryThread, callback=self.function_received, port=self.port)
+        self.server.timeout = self.timeout
+        self.server.start()
 
     def function_received(self, function, args):
         print "Got function %s" % (function)
         if function == "say":
             print "sending message"
-            self.bot.send_message('#llama', 'function called, %s(%s)' % (function, ', '.join(args)))
+            self.send_message('#llama5', '%s' % (', '.join(args)))
 
-    def start(self):
-        self.server.start()
+    @Modifier.command("jsock")
+    def jsock_command(self, context):
+        self._start_server()
+        context.reply("Started jsock")
 
-    def stop(self):
+    def teardown(self):
+        self._stop()
+
+    def _stop(self):
         self.server.stop()
         self.server.join()
 

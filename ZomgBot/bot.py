@@ -165,10 +165,6 @@ class ZomgBot(irc.IRCClient):
         message = str(message)
         reactor.callFromThread(self.say, channel, message, length)
 
-    def _say(self, channel, message, length=None):
-        super(ZomgBot, self).say(channel, message, length)
-        print "saying %s" % message
-
     @staticmethod
     def getNick(user):
         return glob.str_to_tuple(user)[0]
@@ -341,6 +337,8 @@ class Bot():
         reactor.callFromThread(self._stop, quit_message)
 
     def _stop(self, quit_message="Asked to quit"):
+        self.plugins.disableAll()
+        Modifier.forgetEverything()
         self.irc.actually_quit = True
         self.irc.quit(quit_message)
 
