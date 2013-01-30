@@ -44,7 +44,7 @@ class EventDispatcher(object):
             r.addCallback(nextHandler)
             return r
         result = nextHandler()
-        result.addErrback(self.eventCallback, self.eventPostErrback, callbackArgs=(name,), errbackArgs=(name,))
+        result.addCallbacks(self.eventCallback, self.eventPostErrback, callbackArgs=(name,), errbackArgs=(name,))
         return result
     
     def addEventHandler(self, plugin, event, method, priority=0):

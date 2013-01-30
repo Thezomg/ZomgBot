@@ -77,10 +77,10 @@ class Plugin(object):
                 PluginManager.instance.events.addEventHandler(m.__func__.plugin, event, m, priority=priority)
 
     @staticmethod
-    def register(depends=None, provides=None):
+    def register(depends=None):
         def inner(cls):
             cls.name = cls.__module__.split(".")[-1]
-            cls.plugin_info = {"depends": depends, "provides": provides}
+            cls.plugin_info = {"depends": depends}
             PluginManager.instance.plugins[cls.name] = cls
 
             # handle tags we may have left in decorators
@@ -97,15 +97,12 @@ class Plugin(object):
         pass
 
     def get_config(self):
-        if not self.parent.parent.config.has_key("plugins"):
-            self.parent.parent.config["plugins"] = dict()
-        if not self.parent.parent.config["plugins"].has_key(self.name):
-            self.parent.parent.config["plugins"][self.name] = dict()
-        return self.parent.parent.config["plugins"][self.name]
+        cfg = self.parent.parent.config
+        cfg.setdefault("plugins", {})
+        return cfg["plugins"].setdefault(self.name, {})
 
     def save_config(self):
         self.parent.parent.config.save()
-
 
 
 class _Annotation(object):

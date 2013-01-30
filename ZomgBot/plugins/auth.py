@@ -23,7 +23,7 @@ class Auth(Plugin):
         if event.user in self.needuser:
             self.needuser.pop(event.user).callback(False)
 
-    @EventHandler("AuthenticateUser", priority=-1)
+    @EventHandler("AuthenticateUser", priority=-10)
     def auth_event(self, event):
         if event.user.account: return True
         d = Deferred()

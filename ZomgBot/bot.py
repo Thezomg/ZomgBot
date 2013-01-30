@@ -44,6 +44,34 @@ class IRCUser(IRCTarget):
             name, self.username, self.hostname = glob.str_to_tuple(name)[0]
         super(IRCUser, self).__init__(irc, name)
         self.channels = set()
+        self.permissions = set()
+        self.perms_source = {}
+
+    def add_permission(self, permission, source="?"):
+        self.permissions.add(permission)
+        self.perms_source[permission] = source
+        print "({}): I get permission {} from {}".format(self.name, permission, source)
+
+    def remove_permission(self, permission):
+        if permission not in self.permissions: return
+        self.permissions.remove(permission)
+        del self.perms_source[permission]
+
+    def has_permission(self, permission):
+        if permission in self.permissions: return True
+        l = []
+        for p in permission.split('.') + ['']:  # extra empty string because the last generated string is ignored
+            if '.'.join(l + ['*']) in self.permissions: return True
+            l.append(p)
+        return False
+    
+    def why(self, permission):
+        if permission in self.permissions: return self.perms_source[permission]
+        l = []
+        for p in permission.split('.') + ['']:  # extra empty string because the last generated string is ignored
+            if '.'.join(l + ['*']) in self.permissions: return self.perms_source['.'.join(l + ['*'])]
+            l.append(p)
+        return "-"
 
     def set_account(self, account):
         self.account = account

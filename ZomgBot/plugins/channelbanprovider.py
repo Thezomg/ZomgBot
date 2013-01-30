@@ -1,7 +1,7 @@
 from ZomgBot.plugins import Plugin, Modifier
 from ZomgBot.events import EventHandler
 
-@Plugin.register(depends=None, provides=None)
+@Plugin.register(depends=None)
 class ChannelBanProvider(Plugin):
 
     def ban(self, user, issuer, reason):
