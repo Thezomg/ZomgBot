@@ -38,14 +38,21 @@ class IRCUser(IRCTarget):
     account = None
     username = None
     hostname = None
+    status = ''
+    prefix = ''
 
     def __init__(self, irc, name):
         if '!' in name:
-            name, self.username, self.hostname = glob.str_to_tuple(name)[0]
+            name, self.username, self.hostname = glob.str_to_tuple(name)
         super(IRCUser, self).__init__(irc, name)
         self.channels = set()
         self.permissions = set()
         self.perms_source = {}
+
+    @property
+    def hostmask(self):
+        if not self.hostname or not self.username: return None
+        return '{}!{}@{}'.format(self.name, self.username, self.hostname)
 
     def add_permission(self, permission, source="?"):
         self.permissions.add(permission)
@@ -73,6 +80,12 @@ class IRCUser(IRCTarget):
             l.append(p)
         return "-"
 
+    def update_info(self, info):
+        info = glob.str_to_tuple(info)
+        assert self.name == info[0]
+        self.username = info[1] or self.username
+        self.hostname = info[2] or self.hostname
+
     def set_account(self, account):
         self.account = account
 
@@ -98,8 +111,7 @@ class IRCUser(IRCTarget):
 class IRCUserInChannel(object):
     def __init__(self, user):
         self.user = user
-        self.op = False
-        self.voice = False
+        self.status = ''
 
     @property
     def display_name(self):
@@ -107,9 +119,15 @@ class IRCUserInChannel(object):
     
     @property
     def prefix(self):
-        if self.op: return '@'
-        if self.voice: return '+'
-        return ''
+        return self.status[:1]
+
+    @property
+    def op(self):
+        return '@' in self.status
+
+    @property
+    def voice(self):
+        return '+' in self.status
 
     def __str__(self):
         return self.display_name
@@ -128,14 +146,16 @@ class IRCChannel(IRCTarget):
         super(IRCChannel, self).__init__(irc, name)
         self.users = {}
 
-    def getUser(self, name):
-        if self.users.has_key(name):
-            return self.users[name]
-        return None
+    def getUser(self, user):
+        nick = self.irc.getNick(user)
+        u = self.users.get(nick)
+        if u:
+            u.update_info(user)
+            return u
 
     def _addUser(self, name):
         user = IRCUserInChannel(self.irc.getOrCreateUser(name))
-        self.users[name] = user
+        self.users[self.irc.getNick(name)] = user
         return user
 
     def getOrCreateUser(self, name):
@@ -143,7 +163,6 @@ class IRCChannel(IRCTarget):
         if user is None:
             user = self._addUser(name)
             user.user.add_channel(self)
-        print self.getUser(name)
         return user
 
 class ZomgBot(irc.IRCClient):
@@ -170,10 +189,11 @@ class ZomgBot(irc.IRCClient):
         return glob.str_to_tuple(user)[0]
 
     def getUser(self, user):
-        user = self.getNick(user.lower())
-        if user in self.users:
-            return self.users[user]
-        return None
+        name = self.getNick(user.lower())
+        u = self.users.get(name)
+        if u:
+            u.update_info(user)
+            return u
     
     def getOrCreateUser(self, user):
         u = self.getUser(user)
@@ -208,25 +228,49 @@ class ZomgBot(irc.IRCClient):
         ch = IRCChannel(self, channel)
         self.channels[channel] = ch
         return ch
+    
+    def isupport(self, args):
+        self.compute_prefix_names()
+        print "Learned {} prefixes: {}".format(len(self.prefixes), ', '.join("{},{},{}".format(m, p, self.statuses[p]) for m, p in self.prefixes.items()))
+    
+    def compute_prefix_names(self):
+        KNOWN_NAMES = {"o": "op", "h": "halfop", "v": "voice"}
+        prefixdata = self.supported.getFeature("PREFIX", {"o": ("@",0), "v": ("+",1)}).items()
+        op_priority = ([priority for mode, (prefix, priority) in prefixdata if mode == "o"] + [None])[0]
+        self.prefixes, self.statuses, self.priority = {}, {}, {}
+
+        for mode, (prefix, priority) in prefixdata:
+            name = "?"
+            if mode in KNOWN_NAMES:
+                name = KNOWN_NAMES[mode]
+            elif priority == 0:
+                if op_priority == 2:
+                    name = "owner"
+                else:
+                    name = "admin"
+            else:
+                name = "+" + mode
+            self.prefixes[mode] = prefix
+            self.statuses[prefix] = name
+            self.priority[mode] = priority
+            self.priority[prefix] = priority
 
     def irc_RPL_NAMREPLY(self,prefix,params):
         ch = self.getOrCreateChannel(params[2])
         users = string.split(params[3])
         for u in users:
             username = u
-            voice = False
-            op = False
-            if u[0] == '+':
-                username = username[1:]
-                voice = True
-            if u[0] == '@':
-                username = username[1:]
-                op = True
+            status = []
+            for mode, (prefix, priority) in self.supported.getFeature("PREFIX", {"o": ("@",0), "v": ("+",1)}).items():
+                if prefix in username:
+                    username = username.replace(prefix, '')
+                    status.append((prefix, priority))
+
+            status = ''.join(t[0] for t in sorted(status, key=lambda t: t[1]))
 
             user = ch.getOrCreateUser(username)
-            user.voice = voice
-            user.op = op
-            print "{} {} {}".format(voice, op, user)
+            user.status = status
+            print "user added: {}".format(user)
 
     #def irc_unknown(self, prefix, command, params):
         #print "unknown message from IRCserver. prefix: %s, command: %s, params: %s" % (prefix, command, params)
@@ -237,37 +281,71 @@ class ZomgBot(irc.IRCClient):
     def irc_RPL_ENDOFWHOIS(self, prefix, params):
         self.events.dispatchEvent(name="WhoisEnd", event=Event(user=self.getOrCreateUser(params[1])))
 
+    # override our JOIN handling so we can get a user's nick!user@host
+    def irc_JOIN(self, prefix, params):
+        nick = string.split(prefix,'!')[0]
+        channel = params[-1]
+        if nick == self.nickname:
+            self.joined(channel)
+        else:
+            self.userJoined(prefix, channel)
+
     def modeChanged(self, user, channel, _set, modes, args):
+        args = list(args)
         if channel.startswith("#"):
             ch = self.getChannel(channel)
             print "%s: mode (%s) %s (%s)" % (str(channel), "+" if _set else "-", modes, ', '.join(map(str,args)))
 
             if ch:
-                for i in range(len(modes)):
-                    u = ch.getOrCreateUser(args[i])
-                    if modes[i] == "o":
-                        u.op = _set
-                    if modes[i] == "v":
-                        u.voice = _set
+                for m in modes:
+                    arg = args.pop(0)
+                    if m in self.prefixes:
+                        u = ch.getOrCreateUser(arg)
+                        u.status = u.status.replace(self.prefixes[m], '')
+                        if _set:
+                            u.status = ''.join(sorted(list(u.status + self.prefixes[m]), key=lambda k: self.priority[k]))
+
+                    self.events.dispatchEvent(name="ModeSet" if _set else "ModeCleared",
+                                              event=Event(channel=ch, user=ch.getOrCreateUser(user), letter=m, param=arg))
+            else:
+                print "Received mode change for unknown channel {}, possible desync".format(channel)
 
     def userRenamed(self, oldname, newname):
-        print oldname, newname
+        self.events.dispatchEvent(name="UserChangingNick", event=Event(user=self.getOrCreateUser(oldname), newnick=newname))
         self.getOrCreateUser(oldname).nick_changed(newname)
+
+    def userLeftSomehow(self, user, channel):
+        user.remove_channel(channel)
+        if not user.channels:
+            self.events.dispatchEvent(name="StoppedTracking", event=Event(user=user))
+            self.deleteUser(user)
 
     def userLeft(self, user, channel):
         ch = self.getOrCreateChannel(channel)
         u = self.getOrCreateUser(user)
-        u.remove_channel(ch)
-        if not u.channels:
-            self.deleteUser(user)
+        self.events.dispatchEvent(name="UserPartedChannel", event=Event(user=u, channel=ch))
+        self.userLeftSomehow(u, ch)
+
+    def userKicked(self, kickee, channel, kicker, message):
+        ch = self.getOrCreateChannel(channel)
+        kicker = ch.getOrCreateUser(kicker)
+        if kickee == self.nickname:
+            self.events.dispatchEvent(name="Kicked", event=Event(kicker=kicker, channel=ch, message=message))
+        else:
+            kickee = ch.getOrCreateUser(kickee)
+            self.events.dispatchEvent(name="UserKicked", event=Event(kickee=kickee, kicker=kicker, channel=ch, message=message))
+            self.userLeftSomehow(kickee, ch)
 
     def userJoined(self, user, channel):
         ch = self.getOrCreateChannel(channel)
         self.getOrCreateUser(user).add_channel(ch)
+        self.events.dispatchEvent(name="UserJoinedChannel", event=Event(user=ch.getUser(user), channel=ch))
     
     def userQuit(self, user, quitMessage):
         u = self.getOrCreateUser(user)
+        self.events.dispatchEvent(name="UserQuit", event=Event(user=u, message=quitMessage))
         map(u.remove_channel, copy(u.channels))
+        self.events.dispatchEvent(name="StoppedTracking", event=Event(user=user))
         self.deleteUser(user)
 
     def joined(self, channel):
@@ -280,16 +358,13 @@ class ZomgBot(irc.IRCClient):
 
     def privmsg(self, user, channel, msg):
         info = glob.str_to_tuple(user)
-        if channel[0] in self.supported.getFeature("chantypes", tuple('#&')):
+        if channel[0] in self.supported.getFeature("CHANTYPES"):
             ch = self.getChannel(channel)
-            u = ch.getOrCreateUser(info[0])
-            if msg == "/reload":
-                self.factory.parent.reload()
-            else:
-                self.events.dispatchEvent(name="ChannelMsg", event=Event(channel=ch, user=u, message=msg))
-                print "%s: <%s> %s" % (channel, u, msg,)
+            u = ch.getOrCreateUser(user)
+            self.events.dispatchEvent(name="ChannelMsg", event=Event(channel=ch, user=u, message=msg))
+            print "%s: <%s> %s" % (channel, u, msg,)
         elif channel == self.nickname:
-            self.events.dispatchEvent(name="PrivateMsg", event=Event(user=IRCUser(self, info[0]), message=msg))
+            self.events.dispatchEvent(name="PrivateMsg", event=Event(user=self.getOrCreateUser(user), message=msg))
             print "<%s> %s" % (info[0], msg)
         else:
             print "Unrecognized target type: {}".format(channel)
