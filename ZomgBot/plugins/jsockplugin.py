@@ -78,6 +78,13 @@ class JSockPlugin(Plugin):
         if function == "say":
             print "sending message"
             self.send_message('#llama5', '%s' % (', '.join(args)))
+        else:
+            self.events.dispatchEvent(name=function, event=Event(args=args))
+
+    @EventHandler("Testing")
+    def test(self, event):
+        print "got testing event"
+        self.send_message('#llama5', 'Got testing event. Args: %s' % ', '.join(event.args))
 
     @Modifier.command("jsock")
     def jsock_command(self, context):
