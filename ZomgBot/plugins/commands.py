@@ -48,7 +48,6 @@ class Commands(Plugin):
 
     @EventHandler("ChannelMsg")
     def handle_commands(self, event):
-        print event
         if not event.message.startswith('/'): return
         context = CommandContext(event.user, event.channel)
         command = context.parse_args(event.message)
@@ -65,8 +64,6 @@ class Commands(Plugin):
     def cmd_mystatus(self, context):
         context.reply("You are {}, ".format(context.user) + ("logged in as {}".format(context.user.account) if context.user.account else "not logged in"))
 
-    @Modifier.command("yaml")
-    def cmd_yamltest(self, context):
-        self.get_config()['storage'] = 'testing'
-        self.save_config()
-        context.reply("setting key specific to this plugin")
+    @Modifier.command("reload")
+    def cmd_reload(self, context):
+        self.parent.parent.reload()
