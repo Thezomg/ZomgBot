@@ -1,12 +1,17 @@
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
 from twisted.internet.error import ConnectionDone
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 import signal
 import os
 import string
 from copy import copy
 from time import sleep
 from ircglob import glob
+
 from ZomgBot.plugins import PluginManager, Modifier
 from ZomgBot.events import EventDispatcher, Event
 
@@ -437,6 +442,9 @@ class Bot():
         self.nickname = cfg["irc"]["nick"]
 
         self.config = cfg
+
+        self.db_engine = create_engine(cfg["bot"]["database"])
+        self.sessionmaker = sessionmaker(bind=self.db_engine)
 
         self.events = EventDispatcher("fred")
 

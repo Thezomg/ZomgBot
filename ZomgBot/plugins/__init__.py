@@ -7,6 +7,8 @@ from os import path
 from glob import glob
 from functools import wraps
 
+from sqlalchemy.ext.declarative import declarative_base, declared_attr
+
 
 class PluginManager(object):
     """
@@ -14,6 +16,8 @@ class PluginManager(object):
     """
     plugins = {}
     instances = {}
+
+    d_bases = {}
 
     instance = None
 
@@ -40,7 +44,6 @@ class PluginManager(object):
     def enable(self, plugin):
         plugin = self.plugins[plugin]
         self.instances[plugin] = plugin(self)
-        self.instances[plugin].setup()
 
     def disableAll(self):
         for p in self.instances.values():
@@ -54,6 +57,7 @@ class PluginManager(object):
         plugin.teardown()
         self.events.unregisterHandlers(plugin.__class__)
         del self.plugins[plugin.name]
+        if plugin.name in self.d_bases: del self.d_bases[plugin.name]
 
     def ordered_enable(self, *plugins):
         nodes = [(plugin.name, tuple(plugin.plugin_info["depends"] or [])) for plugin in self.plugins.values()]
@@ -61,6 +65,10 @@ class PluginManager(object):
         print "{}: Resolved plugin load order: {}".format(plugins, ', '.join(order))
         for p in order:
             self.enable(p)
+
+    def install_databases(self, plugin):
+        assert plugin in self.d_bases
+        self.d_bases[plugin].metadata.create_all(self.parent.db_engine)
 
 
 class Plugin(object):
@@ -70,17 +78,24 @@ class Plugin(object):
     def __init__(self, parent):
         self.events = parent.events
         self.parent = parent
+        self.bot = parent.parent
+
+        if self.plugin_info.get("db", False):
+            self.db = self.bot.sessionmaker()
+            parent.install_databases(self.name)
 
         for m in dict(inspect.getmembers(self, inspect.ismethod)).values():
             if not hasattr(m.__func__, "event"): continue # not an event handler
             for event, priority in m.__func__.event:
                 PluginManager.instance.events.addEventHandler(m.__func__.plugin, event, m, priority=priority)
 
+        self.setup()
+
     @staticmethod
-    def register(depends=None):
+    def register(depends=None, uses_db=False, name=None):
         def inner(cls):
-            cls.name = cls.__module__.split(".")[-1]
-            cls.plugin_info = {"depends": depends}
+            cls.name = name or cls.__module__.split(".")[-1]
+            cls.plugin_info = {"depends": depends, "db": uses_db}
             PluginManager.instance.plugins[cls.name] = cls
 
             # handle tags we may have left in decorators
@@ -89,6 +104,20 @@ class Plugin(object):
                 m.__func__.plugin = cls
                 
         return inner
+
+    @staticmethod
+    def declarative_base(plugin):
+        if plugin in PluginManager.instance.d_bases:
+            return PluginManager.instance.d_bases[plugin]
+
+        class base(object):
+            @declared_attr
+            def __tablename__(cls):
+                return '{} {}'.format(plugin.lower(), cls.__name__.lower())
+
+        base = declarative_base(cls=base)
+        PluginManager.instance.d_bases[plugin] = base
+        return base
 
     def setup(self):
         pass
@@ -99,10 +128,10 @@ class Plugin(object):
     def send_message(self, target, message):
         self.parent.parent.irc.send_message(target, message)
 
-    def get_config(self):
+    def get_config(self, name=None):
         cfg = self.parent.parent.config
         cfg.setdefault("plugins", {})
-        return cfg["plugins"].setdefault(self.name, {})
+        return cfg["plugins"].setdefault(name or self.name, {})
 
     def save_config(self):
         self.parent.parent.config.save()
