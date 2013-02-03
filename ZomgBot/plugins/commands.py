@@ -62,7 +62,13 @@ class Commands(Plugin):
 
     @Modifier.command("mystatus")
     def cmd_mystatus(self, context):
-        context.reply("You are {}, ".format(context.user) + ("logged in as {}".format(context.user.account) if context.user.account else "not logged in"))
+        userhost = str(context.user)
+        if context.user.hostname:
+            userhost += "!{}@{}".format(context.user.username, context.user.hostname)
+        context.reply("You are {}, ".format(userhost) + ("logged in as {}".format(context.user.account) if context.user.account else "not logged in"))
+        # figure out human names for all their modes
+        mnames = ', '.join(self.parent.parent.irc.statuses[s] for s in context.user.status)
+        if mnames: context.reply("You are {} in {}".format(mnames, context.channel))
 
     @Modifier.command("reload")
     def cmd_reload(self, context):
