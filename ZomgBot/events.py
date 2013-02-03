@@ -29,12 +29,10 @@ class EventDispatcher(object):
             return True
 
     def eventCallback(self, result, event):
-        print "{} processed successfully!".format(event)
         return result
 
     def dispatchEvent(self, event, name=None):
         name = name or event.name
-        print "{} dispatching {}".format(self.name, name)
         rm = copy(self.handlers.get(name, []))
         rm.sort(key=lambda t: t[2])
         def nextHandler(_=None):
