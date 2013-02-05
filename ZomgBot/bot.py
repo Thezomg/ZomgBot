@@ -434,6 +434,7 @@ class Bot():
 
     def reload(self):
         #self.plugins = PluginManager(self)
+        self.config.loadOrCreate()
         self.plugins.disableAll()
         Modifier.forgetEverything()
         self.plugins.load_plugins("ZomgBot.plugins")

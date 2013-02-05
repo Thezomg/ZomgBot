@@ -10,9 +10,13 @@ class Commands(Plugin):
         tasks = Modifier.get("repeat")
         for t in tasks:
             a = t.annotation["repeat"]
+            if self.tasks.has_key(a["args"][0]):
+                print "Already a task with the name {}, error loading second one from plugin {}".format(a["args"][0], t.plugin.name)
+                continue
+
             l = task.LoopingCall(t, PluginManager.instance.instances[t.plugin])
             if a.get("autostart", False):
-                l.start(a.get("time", 1.0), now=False)
+                l.start(a.get("time", 1.0))
             self.tasks[a["args"][0]] = l
 
     def teardown(self):
