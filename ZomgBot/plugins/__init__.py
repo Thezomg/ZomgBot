@@ -126,7 +126,8 @@ class Plugin(object):
         pass
 
     def send_message(self, target, message):
-        self.parent.parent.irc.send_message(target, message)
+        if self.parent.parent.irc:
+            self.parent.parent.irc.send_message(target, message)
 
     def get_config(self, name=None):
         cfg = self.parent.parent.config

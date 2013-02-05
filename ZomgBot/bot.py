@@ -411,7 +411,10 @@ class Bot():
 
     @property
     def irc(self):
-        return self._factory.client
+        if self._factory:
+            return self._factory.client
+        else:
+            return None
 
     def stop(self, quit_message="Asked to quit"):
         reactor.callFromThread(self._stop, quit_message)
