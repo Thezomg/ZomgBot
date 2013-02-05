@@ -2,7 +2,7 @@ from ZomgBot.plugins import Plugin, Modifier
 from datetime import datetime
 import socket
 
-@Plugin.register(depends=["tasks", "auth", "permission"])
+@Plugin.register(depends=["tasks", "auth", "permission", "matches", "commands"])
 class Minecraft(Plugin):
 
     @Modifier.repeat("minecraft", time=10.0, autostart=True)
@@ -118,3 +118,24 @@ class Minecraft(Plugin):
             items.append("Checked {}".format(self.timesince(self.lastcheck)))
 
             context.reply(' | '.join(items))
+
+    @Modifier.match("^\$botnick\$: is (c|p|s) up")
+    def check_server(self, m, context):
+        s = m.groups()[0]
+        print m.groups()
+        server = None
+        if s == 'c':
+            server = 'c.nerd.nu:25565'
+        elif s == 'p':
+            server = 'p.nerd.nu:25565'
+        else:
+            server = 's.nerd.nu:25565'
+
+        if self.server_status.has_key(server):
+            stat = self.server_status[server]
+            if stat == None:
+                context.reply("{} down".format(server))
+            else:
+                context.reply("{}: [{}/{}]".format(stat["motd"], stat["players"], stat["max_players"]))
+        else:
+            context.reply("WAT?!")
