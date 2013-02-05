@@ -1,3 +1,4 @@
 twisted>=12.3.0
 jsocket
 pyyaml
+sqlalchemy
