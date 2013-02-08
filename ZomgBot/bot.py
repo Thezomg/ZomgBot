@@ -151,6 +151,8 @@ class IRCChannel(IRCTarget):
     def __init__(self, irc, name):
         super(IRCChannel, self).__init__(irc, name)
         self.users = {}
+        self.bans = []
+        self._bans = []
 
     def getUser(self, user):
         nick = self.irc.getNick(user)
@@ -297,6 +299,18 @@ class ZomgBot(irc.IRCClient):
 
     def irc_RPL_ENDOFWHOIS(self, prefix, params):
         self.events.dispatchEvent(name="WhoisEnd", event=Event(user=self.getOrCreateUser(params[1])))
+
+    def irc_RPL_BANLIST(self, prefix, params):
+        channel, banmask, setter, time = params[1:]
+        ch = self.getOrCreateChannel(channel)
+        ch._bans.append((banmask, time))
+
+    def irc_RPL_ENDOFBANLIST(self, prefix, params):
+        channel = params[1:]
+        ch = self.getOrCreateChannel(channel)
+        ch.bans = ch._bans
+        ch._bans = []
+        self.events.dispatchEvent(name="BanlistUpdated", event=Event(channel=ch))
 
     # override our JOIN handling so we can get a user's nick!user@host
     def irc_JOIN(self, prefix, params):
