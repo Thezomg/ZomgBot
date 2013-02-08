@@ -4,7 +4,7 @@ from ZomgBot.events import EventHandler
 @Plugin.register(depends=["commands", "auth", "permission"])
 class MCBouncer(Plugin):
 
-	@Modifier.command("ban", permission="mcb.addban")
+    @Modifier.command("ban", permission="mcb.addban")
     def addban(self, context):
         print "adding ban {}".format(' '.join(context.args))
 
@@ -36,10 +36,10 @@ class MCBouncer(Plugin):
     	c = context.channel.name
     	return c in self.get_config().get("channels", [])
 
-   	@Modifier.command("mcballowchan", permission="mcb.manageallowed")
-   	def addallowed(self, context):
-   		print "adding allowed {}".format(' '.join(context.args))
+    @Modifier.command("mcballowchan", permission="mcb.manageallowed")
+    def addallowed(self, context):
+        print "adding allowed {}".format(' '.join(context.args))
 
-   	@Modifier.command("mcbunallowchan", permission="mcb.manageallowed")
-   	def defallowed(self, context):
-   		print "deleting allowed {}".format(' '.join(context.args))
+    @Modifier.command("mcbunallowchan", permission="mcb.manageallowed")
+    def defallowed(self, context):
+        print "deleting allowed {}".format(' '.join(context.args))
