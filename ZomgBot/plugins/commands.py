@@ -1,5 +1,6 @@
 from ZomgBot.plugins import Plugin, Modifier
 from ZomgBot.events import Event, EventHandler
+import logging
 
 class CommandContext(object):
     def __init__(self, user, channel):
@@ -35,6 +36,7 @@ class Commands(Plugin):
                 try:
                     self.commands[name][0].call_with_self(context)
                 except Exception as e:
+                    logging.exception("Encountered a {} (\"{}\") executing /{}. Tell its retarded author to fix their shit.".format(e.__class__.__name__, str(e), name))
                     context.reply("Encountered a {} (\"{}\") executing /{}. Tell its retarded author to fix their shit.".format(e.__class__.__name__, str(e), name))
             else:
                 context.reply("You need the permission {} and you don't have it, you fuckwad.".format(perm))
@@ -73,3 +75,8 @@ class Commands(Plugin):
     @Modifier.command("reload")
     def cmd_reload(self, context):
         self.parent.parent.reload()
+
+    @Modifier.command("rehash")
+    def cmd_rehash(self, context):
+        self.parent.parent.config.loadOrCreate()
+        context.reply("Reloaded the configuration file")

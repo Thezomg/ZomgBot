@@ -95,8 +95,9 @@ class JSockPlugin(Plugin):
         self._stop()
 
     def _stop(self):
-        self.server.stop()
-        self.server.join()
+        if self.server:
+            self.server.stop()
+            self.server.join()
 
 
 if __name__ == '__main__':
