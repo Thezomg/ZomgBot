@@ -2,8 +2,12 @@ from ZomgBot.plugins import Plugin, Modifier, PluginManager
 from twisted.internet import task
 from ZomgBot.events import Event, EventHandler
 
+from functools import partial
+
 @Plugin.register(depends=["auth", "permission"])
 class Commands(Plugin):
+    autostart = []
+
     @EventHandler("PluginsLoaded")
     def handle_reload(self, event):
         self.tasks = {}
@@ -16,7 +20,7 @@ class Commands(Plugin):
 
             l = task.LoopingCall(t, PluginManager.instance.instances[t.plugin])
             if a.get("autostart", False):
-                l.start(a.get("time", 1.0))
+                self.autostart.append(partial(l.start, a.get("time", 1.0)))
             self.tasks[a["args"][0]] = l
 
     def teardown(self):
@@ -42,6 +46,11 @@ class Commands(Plugin):
                 t.start(a.get("time", 1.0))
                 return True
         return False
+
+    @EventHandler("SignedOn")
+    def on_SignedOn(self, event):
+        for task in self.autostart:
+            task()
 
     @Modifier.command("stoptask")
     def stop_task(self, context):
