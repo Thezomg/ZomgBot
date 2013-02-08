@@ -95,6 +95,7 @@ class IRCUser(IRCTarget):
         self.account = account
 
     def add_channel(self, channel):
+        if self.name == self.irc.nickname: return
         self.channels.add(channel)
         channel.getOrCreateUser(self.name)
 
@@ -160,7 +161,7 @@ class IRCChannel(IRCTarget):
 
     def _addUser(self, name):
         user = IRCUserInChannel(self.irc.getOrCreateUser(name))
-        self.users[self.irc.getNick(name)] = user
+        if self.irc.getNick(name) != self.irc.nickname: self.users[self.irc.getNick(name)] = user
         return user
 
     def getOrCreateUser(self, name):
@@ -213,7 +214,7 @@ class ZomgBot(irc.IRCClient):
     def _addIRCUser(self, user):
         user = self.getNick(user)
         u = IRCUser(self, user)
-        self.users[user.lower()] = u
+        if self.getNick(user) != self.nickname: self.users[user.lower()] = u
         return u
 
     def getChannel(self, channel):
@@ -260,22 +261,33 @@ class ZomgBot(irc.IRCClient):
             self.priority[mode] = priority
             self.priority[prefix] = priority
 
-    def irc_RPL_NAMREPLY(self,prefix,params):
-        ch = self.getOrCreateChannel(params[2])
+    def parse_prefixes(self, channel, nick, prefixes=''):
+        ch = self.getOrCreateChannel(channel)
+        status = []
+        for mode, (prefix, priority) in self.supported.getFeature("PREFIX", {"o": ("@",0), "v": ("+",1)}).items():
+            if prefix in prefix + nick:
+                nick = nick.replace(prefix, '')
+                status.append((prefix, priority))
+        if nick == self.nickname: return
+        status = ''.join(t[0] for t in sorted(status, key=lambda t: t[1]))
+        user = ch.getOrCreateUser(nick)
+        user.status = status
+
+    def irc_RPL_NAMREPLY(self, prefix, params):
         users = string.split(params[3])
         for u in users:
-            username = u
-            status = []
-            for mode, (prefix, priority) in self.supported.getFeature("PREFIX", {"o": ("@",0), "v": ("+",1)}).items():
-                if prefix in username:
-                    username = username.replace(prefix, '')
-                    status.append((prefix, priority))
+            self.parse_prefixes(params[2], u)
+            print "Learned about {}".format(u)
 
-            status = ''.join(t[0] for t in sorted(status, key=lambda t: t[1]))
-
-            user = ch.getOrCreateUser(username)
-            user.status = status
-            print "user added: {}".format(user)
+    def irc_RPL_WHOREPLY(self, prefix, params):
+        _, channel, username, host, server, nick, status, hg = params
+        if nick == self.nickname: return
+        hops, gecos = hg.split(' ', 1)
+        self.parse_prefixes(channel, nick, status[1:].replace('*', ''))
+        user = self.getOrCreateUser(nick)
+        user.username = username
+        user.hostname = host
+        print "Learned more about {} ({})".format(user, user.hostmask)
 
     #def irc_unknown(self, prefix, command, params):
         #print "unknown message from IRCserver. prefix: %s, command: %s, params: %s" % (prefix, command, params)
@@ -305,6 +317,7 @@ class ZomgBot(irc.IRCClient):
                 for m in modes:
                     arg = args.pop(0)
                     if m in self.prefixes:
+                        if arg == self.nickname: continue
                         u = ch.getOrCreateUser(arg)
                         u.status = u.status.replace(self.prefixes[m], '')
                         if _set:
@@ -323,7 +336,7 @@ class ZomgBot(irc.IRCClient):
         user.remove_channel(channel)
         if not user.channels:
             self.events.dispatchEvent(name="StoppedTracking", event=Event(user=user))
-            self.deleteUser(user)
+            self.deleteUser(user.name)
 
     def userLeft(self, user, channel):
         ch = self.getOrCreateChannel(channel)
@@ -358,6 +371,7 @@ class ZomgBot(irc.IRCClient):
             del self.channels[channel.lower()]
 
         ch = self._addIRCChannel(channel)
+        self.sendLine("WHO :{}".format(channel))
         self.events.dispatchEvent(name="IJoinChannel", event=ch)
         print "Joined %s" % (channel)
 
