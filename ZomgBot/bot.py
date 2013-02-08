@@ -185,6 +185,7 @@ class ZomgBot(irc.IRCClient):
         self.users = {}
 
     def signedOn(self):
+        self.events.dispatchEvent(name="SignedOn", event=None)
         self.join(self.factory.channel)
         print "Signed on as %s" % (self.nickname,)
 
