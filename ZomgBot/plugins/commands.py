@@ -1,5 +1,7 @@
 from ZomgBot.plugins import Plugin, Modifier
 from ZomgBot.events import Event, EventHandler
+
+from collections import Sequence
 import logging
 
 class CommandContext(object):
@@ -40,7 +42,11 @@ class Commands(Plugin):
             perm = an.get("permission")
             if not perm or context.user.has_permission(perm):
                 try:
-                    self.commands[name][0].call_with_self(context)
+                    result = self.commands[name][0].call_with_self(context)
+                    if isinstance(result, basestring):
+                        context.reply(result)
+                    elif isinstance(result, Sequence):
+                        map(context.reply, result)
                 except Exception as e:
                     logging.exception("Encountered a {} (\"{}\") executing /{}. Tell its retarded author to fix their shit.".format(e.__class__.__name__, str(e), name))
                     context.reply("Encountered a {} (\"{}\") executing /{}. Tell its retarded author to fix their shit.".format(e.__class__.__name__, str(e), name))
@@ -50,7 +56,6 @@ class Commands(Plugin):
             context.reply("No such command, try another one you retard.")
 
     def do_command(self, name, context):
-        print "Trying to execute {}".format(name)
         r = self.events.dispatchEvent(name="AuthenticateUser", event=Event(user=context.user.user, irc=context.user.irc))
         r.addCallback(self._really_do_command, name, context)
 
