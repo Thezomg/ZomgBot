@@ -113,7 +113,7 @@ class Plugin(object):
         class base(object):
             @declared_attr
             def __tablename__(cls):
-                return '{} {}'.format(plugin.lower(), cls.__name__.lower())
+                return '_{}_{}'.format(plugin.lower(), cls.__name__.lower())
 
         base = declarative_base(cls=base)
         PluginManager.instance.d_bases[plugin] = base
