@@ -304,10 +304,10 @@ class ZomgBot(irc.IRCClient):
     def irc_RPL_BANLIST(self, prefix, params):
         channel, banmask, setter, time = params[1:]
         ch = self.getOrCreateChannel(channel)
-        ch._bans.append((banmask, time))
+        ch._bans.append((banmask, setter, time))
 
     def irc_RPL_ENDOFBANLIST(self, prefix, params):
-        channel = params[1:]
+        channel = params[1]
         ch = self.getOrCreateChannel(channel)
         ch.bans = ch._bans
         ch._bans = []
