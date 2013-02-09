@@ -437,7 +437,6 @@ class ZomgBotFactory(protocol.ClientFactory):
         print "Could not connect: %s" % (reason)
 
 class Bot():
-
     @property
     def irc(self):
         if self._factory:
