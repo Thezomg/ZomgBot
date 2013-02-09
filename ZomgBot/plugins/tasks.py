@@ -20,7 +20,10 @@ class Commands(Plugin):
 
             l = task.LoopingCall(t, PluginManager.instance.instances[t.plugin])
             if a.get("autostart", False):
-                self.autostart.append(partial(l.start, a.get("time", 1.0)))
+                if self.bot.irc is None:
+                    self.autostart.append(partial(l.start, a.get("time", 1.0)))
+                else:
+                    l.start(a.get("time", 1.0))
             self.tasks[a["args"][0]] = l
 
     def teardown(self):
@@ -51,6 +54,7 @@ class Commands(Plugin):
     def on_SignedOn(self, event):
         for task in self.autostart:
             task()
+        self.autostart = []
 
     @Modifier.command("stoptask")
     def stop_task(self, context):
