@@ -75,7 +75,10 @@ class BanManager(Plugin):
 
     @Modifier.command("untrack")
     def cmd_unban(self, context):
-        self.remove_ban(context.args[0])
+        if self.remove_ban(context.args[0]):
+            return "Forgot ban for {}.".format(context.args[0])
+        else:
+            return "Mask is not in ban database."
 
     def remove_ban(self, mask):
         r = self.db.query(Ban).filter(Ban.banmask == mask).delete()
