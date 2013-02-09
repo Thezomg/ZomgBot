@@ -19,8 +19,14 @@ class CommandContext(object):
 
 @Plugin.register(depends=["auth", "permission"])
 class Commands(Plugin):
+    prefix = "/"
+
+    def setup(self):
+        if "prefix" in self.get_config():
+            self.prefix = self.get_config()["prefix"]
+
     @EventHandler("PluginsLoaded")
-    def handle_reload(self, event):
+    def on_PluginsLoaded(self, event):
         cmds = Modifier.get("command")
         self.commands = {}
         for cmd in cmds:
@@ -50,14 +56,14 @@ class Commands(Plugin):
 
     @EventHandler("ChannelMsg")
     def handle_commands(self, event):
-        if not event.message.startswith('/'): return
+        if not event.message.startswith(self.prefix): return
         context = CommandContext(event.user, event.channel)
         command = context.parse_args(event.message)
         self.do_command(command, context)
 
     @EventHandler("PrivateMsg")
     def handle_private(self, event):
-        if not event.message.startswith('/'): return
+        if not event.message.startswith(self.prefix): return
         context = CommandContext(event.user, None)
         command = context.parse_args(event.message)
         self.do_command(command, context)
