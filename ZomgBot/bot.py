@@ -265,8 +265,10 @@ class ZomgBot(irc.IRCClient):
                 self.end_cap()
 
     def signedOn(self):
-        self.events.dispatchEvent(name="SignedOn", event=None)
-        self.join(self.factory.channel)
+        def join_channels(result):
+            map(self.join, self.factory.channels)
+        r = self.events.dispatchEvent(name="SignedOn", event=None)
+        r.addCallback(join_channels)
         print "Signed on as %s" % (self.nickname,)
 
     def send_message(self, channel, message, length=None):
@@ -491,9 +493,9 @@ class ZomgBotFactory(protocol.ClientFactory):
     def client(self):
         return self._protocol
 
-    def __init__(self, parent, channel='#llama', nickname='ZomgBot'):
+    def __init__(self, parent, channels=[], nickname='ZomgBot'):
         self.parent = parent
-        self.channel = channel
+        self.channels = channels
         self.nickname = nickname
 
     def buildProtocol(self, addr):
@@ -550,7 +552,7 @@ class Bot():
     def init(self, cfg):
         self.server = cfg["irc"]["server"]
         self.port =   cfg["irc"]["port"]
-        self.channel = cfg["irc"]["channels"][0]
+        self.channels = cfg["irc"]["channels"]
         self.nickname = cfg["irc"]["nick"]
 
         self.config = cfg
@@ -558,13 +560,13 @@ class Bot():
         self.db_engine = create_engine(cfg["bot"]["database"])
         self.sessionmaker = sessionmaker(bind=self.db_engine)
 
-        self.events = EventDispatcher("fred")
+        self.events = EventDispatcher()
 
         self.plugins = PluginManager(self)
         self.plugins.load_plugins("ZomgBot.plugins")
 
     def run(self):
-        self._factory = ZomgBotFactory(self, self.channel, self.nickname)
+        self._factory = ZomgBotFactory(self, self.channels, self.nickname)
         reactor.connectTCP(self.server, self.port, self._factory)
         reactor.run()
 
