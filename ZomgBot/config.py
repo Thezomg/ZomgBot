@@ -10,7 +10,7 @@ DEFAULT = {
     },
     "bot": {
         "admins":   ["edk141", "Deaygo"],
-        "plugins":  ["ban_manager", "mcbouncer"],
+        "plugins":  ["ban_manager", "util"],
     },
 }
 

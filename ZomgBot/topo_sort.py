@@ -29,7 +29,6 @@ def recursive_sort(nodelist, initial=None):
     """
     recursive (depth-first) topological sort of nodelist
     """
-    print "xx", nodelist, initial
     sorted = []
     visited = set()
     if initial is None:

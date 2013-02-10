@@ -29,7 +29,7 @@ class EventDispatcher(object):
             return True
 
     def eventCallback(self, result, event):
-        return result
+        return True
 
     def dispatchEvent(self, event, name=None):
         name = name or event.name
@@ -39,22 +39,21 @@ class EventDispatcher(object):
             if not rm: return succeed(True)
             plugin, method = rm.pop(0)[:2]
             r = maybeDeferred(method, event)
-            r.addCallback(nextHandler)
+            r.addCallbacks(nextHandler, self.eventErrback, errbackArgs=(event, plugin))
             return r
         result = nextHandler()
         result.addCallbacks(self.eventCallback, self.eventPostErrback, callbackArgs=(name,), errbackArgs=(name,))
         return result
     
     def addEventHandler(self, plugin, event, method, priority=0):
-        print "{} adding handler for {} (p={}): {}".format(self.name, event, priority, method)
         self.handlers.setdefault(event, [])
         self.handlers[event].append((plugin, method, priority))
+        print "added {} handling {}".format(method, event)
 
     def unregisterAll(self):
         handlers = {}
 
     def unregisterHandlers(self, plugin):
-        print "{} removing handlers for {}".format(self.name, plugin)
         self.handlers = dict((k, [h for h in handlerSet if h[0] != plugin]) for k, handlerSet in self.handlers.items())
 
 class Event(dict):
