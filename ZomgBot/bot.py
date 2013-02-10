@@ -183,6 +183,86 @@ class ZomgBot(irc.IRCClient):
     def __init__(self):
         self.channels = {}
         self.users = {}
+        self.capabilities = {}
+        self.cap_requests = set()
+        self.supports_cap = False
+
+    # implement capability negotiation from
+    # http://ircv3.atheme.org/specification/capability-negotiation-3.1
+
+    # protocol for plugins:
+    # handle the "CapList" event and use it to call bot.irc.request_cap(caps...)
+    # then handle "CapEnding" where you can check the current caps list in bot.irc.capabilities
+    # and (if you're doing SASL for e.g.) return a Deferred that fires when auth is complete
+
+    def register(self, nickname, hostname='foo', servername='bar'):
+        self.sendLine("CAP LS")
+        return irc.IRCClient.register(self, nickname, hostname, servername)
+    
+    def lineReceived(self, line):
+        return irc.IRCClient.lineReceived(self, line)
+
+    def sendLine(self, line):
+        return irc.IRCClient.sendLine(self, line)
+    
+    def _parse_cap(self, cap):
+        mod = ''
+        while cap[0] in "-~=":
+            mod, cap = mod + cap[0], cap[1:]
+        if '/' in cap:
+            vendor, cap = cap.split('/', 1)
+        else:
+            vendor = None
+        return (cap, mod, vendor)
+    
+    def request_cap(self, *caps):
+        req_list = ' '.join(caps)
+        self.cap_requests |= set(caps)
+        self.sendLine("CAP REQ :{}".format(' '.join(caps)))
+
+    def end_cap(self):
+        def actually_end(result):
+            self.sendLine("CAP END")
+        r = self.events.dispatchEvent(name="CapEnding", event=None)
+        r.addCallback(actually_end)
+    
+    def irc_CAP(self, prefix, params):
+        self.supports_cap = True
+        identifier, subcommand, args = params
+        args = args.split(' ')
+        if subcommand == "LS":
+            self.events.dispatchEvent(name="CapList", event=Event(capabilities=args))
+            if not self.cap_requests:
+                self.sendLine("CAP END")
+        elif subcommand == "ACK":
+            ack = []
+            for cap in args:
+                if not cap: continue
+                cap, mod, vendor = self._parse_cap(cap)
+                # just remove that capability and do nothing else
+                if '-' in mod:
+                    if cap in self.capabilities:
+                        self.events.dispatchEvent(name="CapRemoved", event=Event(cap=cap))
+                        del self.capabilities[cap]
+                    continue
+                if '=' in mod:
+                    self.capabilities[cap] = True
+                else:
+                    self.capabilities[cap] = False
+                if '~' in mod:
+                    ack.append(cap)
+                self.cap_requests.remove(cap)
+            if ack:
+                self.sendLine("CAP ACK :{}".format(' '.join(ack)))
+            if not self.cap_requests:
+                self.end_cap()
+        elif subcommand == "NAK":
+            # this implementation is probably not compliant but it will have to do for now
+            for cap in args:
+                self.cap_requests.remove(cap)
+                self.events.dispatchEvent(name="CapDenied", event=Event(cap=cap))
+            if not self.cap_requests:
+                self.end_cap()
 
     def signedOn(self):
         self.events.dispatchEvent(name="SignedOn", event=None)
