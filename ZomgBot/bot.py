@@ -329,7 +329,6 @@ class ZomgBot(irc.IRCClient):
     
     def isupport(self, args):
         self.compute_prefix_names()
-        print "Learned {} prefixes: {}".format(len(self.prefixes), ', '.join("{},{},{}".format(m, p, self.statuses[p]) for m, p in self.prefixes.items()))
     
     def compute_prefix_names(self):
         KNOWN_NAMES = {"o": "op", "h": "halfop", "v": "voice"}
@@ -369,7 +368,6 @@ class ZomgBot(irc.IRCClient):
         users = string.split(params[3])
         for u in users:
             self.parse_prefixes(params[2], u)
-            print "Learned about {}".format(u)
 
     def irc_RPL_WHOREPLY(self, prefix, params):
         _, channel, username, host, server, nick, status, hg = params
@@ -379,7 +377,6 @@ class ZomgBot(irc.IRCClient):
         user = self.getOrCreateUser(nick)
         user.username = username
         user.hostname = host
-        print "Learned more about {} ({})".format(user, user.hostmask)
 
     #def irc_unknown(self, prefix, command, params):
         #print "unknown message from IRCserver. prefix: %s, command: %s, params: %s" % (prefix, command, params)

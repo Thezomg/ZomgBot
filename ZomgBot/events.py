@@ -48,7 +48,6 @@ class EventDispatcher(object):
     def addEventHandler(self, plugin, event, method, priority=0):
         self.handlers.setdefault(event, [])
         self.handlers[event].append((plugin, method, priority))
-        print "added {} handling {}".format(method, event)
 
     def unregisterAll(self):
         handlers = {}
