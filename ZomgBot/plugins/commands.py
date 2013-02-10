@@ -16,7 +16,9 @@ class CommandContext(object):
             self.user.say(msg)
     
     def parse_args(self, msg):
-        self.args = msg[1:].split(' ')
+        msg = msg[1:]
+        self.args = msg.split(' ')
+        self.full = msg.split(' ', 1)[-1] if len(self.args) > 1 else None
         return self.args.pop(0)
 
 @Plugin.register(depends=["auth", "permission"])
@@ -34,7 +36,6 @@ class Commands(Plugin):
         for cmd in cmds:
             a = cmd.annotation["command"]
             [self.commands.update({n: (cmd, a)}) for n in a.get("aliases", []) + [a["args"][0]]]
-        print self.commands
 
     def _really_do_command(self, auth_result, name, context):
         if name in self.commands:
@@ -82,12 +83,3 @@ class Commands(Plugin):
         # figure out human names for all their modes
         mnames = ', '.join(self.parent.parent.irc.statuses[s] for s in context.user.status)
         if mnames: context.reply("You are {} in {}".format(mnames, context.channel))
-
-    @Modifier.command("reload")
-    def cmd_reload(self, context):
-        self.parent.parent.reload()
-
-    @Modifier.command("rehash")
-    def cmd_rehash(self, context):
-        self.parent.parent.config.loadOrCreate()
-        context.reply("Reloaded the configuration file")
