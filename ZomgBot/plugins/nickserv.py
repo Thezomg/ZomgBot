@@ -1,6 +1,8 @@
 from ZomgBot.plugins import Plugin
 from ZomgBot.events import EventHandler
 
+from string import Template
+
 from twisted.internet.defer import Deferred
 
 @Plugin.register(depends=[])
@@ -17,12 +19,31 @@ class NickServ(Plugin):
         user = cfg.get("username", "ZomgBot")
         password = cfg.get("password", "hunter2")
         return "{0}\0{0}\0{1}".format(user, password).encode('base64').strip()
+
+    def get_nickserv_command(self):
+        cfg = self.get_config()
+        user = cfg.get("username", "ZomgBot")
+        password = cfg.get("password", "hunter2")
+        template = Template(cfg.get("command", "IDENTIFY $user $password"))
+        return template.safe_substitute(user=user, password=password)
+    
+    def get_nickserv_user(self):
+        return self.get_config().get("service", "NickServ")
+
+    def check_notice(self, user, message):
+        if user.name != self.get_nickserv_user(): return
+        success_msg = self.get_config().get("success_msg", "You are now identified")
+        return success_msg in message
     
     @EventHandler("SignedOn")
     def on_SignedOn(self, event):
         if not self.bot.irc.supports_cap:
             print "BOO, the server doesn't FUCKING support the cap command."
-            print "we should probably try PMing NickServ instead."
+            self.bot.irc.sendLine(self.get_nickserv_command())
+
+    @EventHandler("PrivateNotice")
+    def on_PrivateNotice(self, event):
+        self.check_notice(self, event.user, event.message)
 
     @EventHandler("CapList")
     def on_CapList(self, event):
