@@ -8,6 +8,7 @@ from twisted.internet.defer import Deferred
 @Plugin.register(depends=[])
 class NickServ(Plugin):
     delay_end = None
+    delay_join = None
 
     def finish(self):
         if self.delay_end is None: return
@@ -33,17 +34,29 @@ class NickServ(Plugin):
     def check_notice(self, user, message):
         if user.name != self.get_nickserv_user(): return
         success_msg = self.get_config().get("success_msg", "You are now identified")
-        return success_msg in message
+        if success_msg not in message:
+            self.maybe_quit()
+            return
+        if self.delay_join is not None:
+            self.delay_join.callback(True)
+            self.delay_join = None
+
+    def maybe_quit(self):
+        cfg = self.get_config()
+        if cfg.get("quit_on_error", False):
+            self.bot.stop("Authentication failed.")
     
     @EventHandler("SignedOn")
     def on_SignedOn(self, event):
         if not self.bot.irc.supports_cap:
             print "BOO, the server doesn't FUCKING support the cap command."
             self.bot.irc.sendLine(self.get_nickserv_command())
+            self.delay_join = Deferred()
+            return self.delay_join
 
     @EventHandler("PrivateNotice")
     def on_PrivateNotice(self, event):
-        self.check_notice(self, event.user, event.message)
+        self.check_notice(event.user, event.message)
 
     @EventHandler("CapList")
     def on_CapList(self, event):
@@ -66,6 +79,7 @@ class NickServ(Plugin):
     @EventHandler("IRC.905")
     def on_auth_failed(self, event):
         self.finish()
+        self.maybe_quit()
 
     @EventHandler("IRC.900")
     def on_authed(self, event):
