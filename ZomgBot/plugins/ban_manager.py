@@ -122,7 +122,7 @@ class BanManager(Plugin):
     
     @EventHandler("BanlistUpdated")
     def on_BanlistUpdated(self, event):
-        limit = int(self.bot.irc.supported.getFeature("MAXBANS", 50) * 2.0/3.0)
+        limit = self.bot.irc.supported.getFeature("MAXLIST", [(None, 50)])[0][1] / 2
         bans = event.channel.bans[limit:]
         for mask, setter, time in sorted(bans, key=lambda t: t[1]):
             self.track_ban(event.channel, setter, mask)
