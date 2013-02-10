@@ -275,6 +275,13 @@ class ZomgBot(irc.IRCClient):
         message = str(message)
         reactor.callFromThread(self.say, channel, message, length)
 
+    def handleCommand(self, command, prefix, params):
+        def really_handle(result):
+            if not result: return
+            return irc.IRCClient.handleCommand(self, command, prefix, params)
+        r = self.events.dispatchEvent(name="IRC." + command, event=Event(prefix=prefix, params=params))
+        r.addCallback(really_handle)
+
     @staticmethod
     def getNick(user):
         return glob.str_to_tuple(user)[0]
