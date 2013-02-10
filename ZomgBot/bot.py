@@ -489,6 +489,18 @@ class ZomgBot(irc.IRCClient):
         else:
             print "Unrecognized target type: {}".format(channel)
 
+    def noticed(self, user, channel, msg):
+        info = glob.str_to_tuple(user)
+        if channel[0] in self.supported.getFeature("CHANTYPES"):
+            ch = self.getChannel(channel)
+            u = ch.getOrCreateUser(user)
+            self.events.dispatchEvent(name="ChannelNotice", event=Event(channel=ch, user=u, message=msg))
+            print "N %s: <%s> %s" % (channel, u, msg,)
+        elif channel == self.nickname:
+            self.events.dispatchEvent(name="PrivateNotice", event=Event(user=self.getOrCreateUser(user), message=msg))
+            print "N <%s> %s" % (info[0], msg)
+        # don't bitch about "unrecognized target type" as ircds have a habit of sending us notices to things like "AUTH"
+
 class ZomgBotFactory(protocol.ClientFactory):
     protocol = ZomgBot
     _protocol = None
