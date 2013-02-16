@@ -493,8 +493,8 @@ class ZomgBot(irc.IRCClient):
                 print "Received mode change for unknown channel {}, possible desync".format(channel)
 
     def userRenamed(self, oldname, newname):
-        self.events.dispatchEvent(name="UserChangingNick", event=Event(user=self.getOrCreateUser(oldname), newnick=newname))
         self.getOrCreateUser(oldname).nick_changed(newname)
+        self.events.dispatchEvent(name="UserChangedNick", event=Event(user=self.getOrCreateUser(newname), old=oldname))
 
     def userLeftSomehow(self, user, channel):
         user.remove_channel(channel)
