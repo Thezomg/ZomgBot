@@ -4,6 +4,9 @@ from ZomgBot.events import Event, EventHandler
 from collections import Sequence
 import logging
 
+from twisted.internet.defer import Deferred, maybeDeferred
+
+
 class CommandContext(object):
     def __init__(self, user, channel):
         self.user = user
@@ -20,6 +23,7 @@ class CommandContext(object):
         self.args = msg.split(' ')
         self.full = msg.split(' ', 1)[-1] if len(self.args) > 1 else None
         return self.args.pop(0)
+
 
 @Plugin.register(depends=["auth", "permission"])
 class Commands(Plugin):
@@ -40,24 +44,27 @@ class Commands(Plugin):
     def _really_do_command(self, auth_result, name, context):
         if name in self.commands:
             cmd, an = self.commands[name]
-            perm = an.get("permission")
-            if not perm or context.user.has_permission(perm):
+            perm = an.get("permission", None)
+            if not perm or context.user.has_permission(perm, context.channel) or (an.get("chanop", False) and context.user.op):
+                context.permission = "global" if not perm or context.user.has_permission(perm) else "channel"
                 try:
-                    result = self.commands[name][0].call_with_self(context)
-                    if isinstance(result, basestring):
-                        context.reply(result)
-                    elif isinstance(result, Sequence):
-                        map(context.reply, result)
+                    result = maybeDeferred(self.commands[name][0].call_with_self, context)
+                    def inner(result):
+                        if isinstance(result, basestring):
+                            context.reply(result)
+                        elif isinstance(result, Sequence):
+                            map(context.reply, result)
+                    result.addCallback(inner)
                 except Exception as e:
-                    logging.exception("Encountered a {} (\"{}\") executing /{}. Tell its retarded author to fix their shit.".format(e.__class__.__name__, str(e), name))
-                    context.reply("Encountered a {} (\"{}\") executing /{}. Tell its retarded author to fix their shit.".format(e.__class__.__name__, str(e), name))
+                    logging.exception("Encountered a {} (\"{}\") executing /{}.".format(e.__class__.__name__, str(e), name))
+                    context.reply("Encountered a {} (\"{}\") executing /{}.".format(e.__class__.__name__, str(e), name))
             else:
-                context.reply("You need the permission {} and you don't have it, you fuckwad.".format(perm))
+                context.reply("You need the permission {}.".format(perm))
         else:
-            context.reply("No such command, try another one you retard.")
+            pass # context.reply("No such command, try another one you retard.")
 
     def do_command(self, name, context):
-        r = self.events.dispatchEvent(name="AuthenticateUser", event=Event(user=context.user.user, irc=context.user.irc))
+        r = self.events.dispatchEvent(name="AuthenticateUser", event=Event(user=context.user.base, irc=context.user.irc))
         r.addCallback(self._really_do_command, name, context)
 
     @EventHandler("ChannelMsg")
