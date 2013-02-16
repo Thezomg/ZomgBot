@@ -218,6 +218,10 @@ class ZomgBot(irc.IRCClient):
     # then handle "CapEnding" where you can check the current caps list in bot.irc.capabilities
     # and (if you're doing SASL for e.g.) return a Deferred that fires when auth is complete
 
+    def connectionMade(self):
+        self.events.dispatchEvent(name="Connected", event=None)
+        return irc.IRCClient.connectionMade(self)
+
     def register(self, nickname, hostname='foo', servername='bar'):
         self.sendLine("CAP LS")
         return irc.IRCClient.register(self, nickname, hostname, servername)
