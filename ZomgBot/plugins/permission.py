@@ -27,7 +27,11 @@ class Permission(Plugin):
         for p in parents:
             self.add_groups(user, p, stack)
         for p in permissions:
-            user.add_permission(p, "group:" + groupname)
+            if '/' in p:
+                channel, p = p.split('/', 1)
+            else:
+                channel = None
+            user.add_permission(p, "group:" + groupname, channel)
 
         stack.pop()
 
@@ -38,7 +42,12 @@ class Permission(Plugin):
             user.add_permission("*", "config")
 
         permissions = cfg["users"].get(user.account, {}).get("permissions", [])
-        for p in permissions: user.add_permission(p, "explicit")
+        for p in permissions:
+            if '/' in p:
+                channel, p = p.split('/', 1)
+            else:
+                channel = None
+            user.add_permission(p, "explicit", channel)
 
         groups = cfg["users"].get(user.account, {}).get("groups", [])
         for g in groups: self.add_groups(user, g)
@@ -50,69 +59,63 @@ class Permission(Plugin):
         if event.user in self.already_updated or not event.user.account: return
         self.refresh_permissions(event.user)
 
-    @Modifier.command("checkperm")
-    def cmd_checkperm(self, context):
-        if context.user.has_permission(context.args[0]):
-            context.reply("yes!")
-        else:
-            context.reply("no : (")
-
-    @Modifier.command("myperms")
-    def cmd_myperms(self, context):
-        def key(p):
-            return context.user.why(p)
-        perms = groupby(sorted(context.user.permissions, key=key), key)
-        context.reply('; '.join("{} gives {}".format(k, ', '.join(g)) for k, g in perms))
-
-    @Modifier.command("groupallow", permission="bot.admin")
+    @Modifier.command("groupallow", permission="bot.admin.groupallow")
     def cmd_groupallow(self, context):
         assert len(context.args) >= 2
         perms = context.args
         group = perms.pop(0)
         cfg = self.get_config()["groups"].setdefault(group, {"permissions": [], "parents": []})
         for p in perms:
+            if context.permission != "global" and not p.startswith(context.channel.name + '/'):
+                p = context.channel.name + '/' + p
             if p not in cfg["permissions"]:
                cfg["permissions"].append(p)
         self.reset()
         self.save_config()
 
-    @Modifier.command("groupremove", permission="bot.admin")
+    @Modifier.command("groupremove", permission="bot.admin.groupremove")
     def cmd_groupremove(self, context):
         assert len(context.args) >= 2
         perms = context.args
         group = perms.pop(0)
         cfg = self.get_config()["groups"].get(group, {"permissions": [], "parents": []})
         for p in perms:
+            if context.permission != "global" and not p.startswith(context.channel.name + '/'):
+                p = context.channel.name + '/' + p
             if p in cfg["permissions"]:
                del cfg["permissions"][p]
         self.reset()
         self.save_config()
 
-    @Modifier.command("userallow", permission="bot.admin")
+    @Modifier.command("userallow", permission="bot.admin.userallow")
     def cmd_userallow(self, context):
         assert len(context.args) >= 2
         perms = context.args
         username = perms.pop(0)
         cfg = self.get_config()["users"].setdefault(username, {"permissions": [], "groups": []})
         for p in perms:
+            if context.permission != "global" and not p.startswith(context.channel.name + '/'):
+                p = context.channel.name + '/' + p
             if p not in cfg["permissions"]:
                cfg["permissions"].append(p)
         self.reset()
         self.save_config()
 
-    @Modifier.command("userremove", permission="bot.admin")
+    @Modifier.command("userremove", permission="bot.admin.userremove")
     def cmd_userremove(self, context):
         assert len(context.args) >= 2
         perms = context.args
         username = perms.pop(0)
         cfg = self.get_config()["users"].setdefault(username, {"permissions": [], "groups": []})
         for p in perms:
+            if context.permission != "global" and not p.startswith(context.channel.name + '/'):
+                p = context.channel.name + '/' + p
             if p in cfg["permissions"]:
                del cfg["permissions"][p]
         self.reset()
         self.save_config()
 
-    @Modifier.command("addtogroup", permission="bot.admin")
+    @Modifier.command("addtogroup", permission="#bot.admin.addtogroup")
     def cmd_addtogroup(self, context):
         group, username = context.args
         cfg = self.get_config()["users"].setdefault(username, {"permissions": [], "groups": []})
@@ -121,7 +124,7 @@ class Permission(Plugin):
         self.reset()
         self.save_config()
 
-    @Modifier.command("removefromgroup", permission="bot.admin")
+    @Modifier.command("removefromgroup", permission="#bot.admin.removefromgroup")
     def cmd_removefromgroup(self, context):
         group, username = context.args
         cfg = self.get_config()["users"].setdefault(username, {"permissions": [], "groups": []})
