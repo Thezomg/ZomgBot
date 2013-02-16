@@ -8,6 +8,7 @@ from glob import glob
 from functools import wraps
 
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
+from sqlalchemy.orm import scoped_session
 
 
 class PluginManager(object):
@@ -81,8 +82,10 @@ class Plugin(object):
         self.bot = parent.parent
 
         if self.plugin_info.get("db", False):
-            self.db = self.bot.sessionmaker()
+            self._session = scoped_session(self.bot.sessionmaker)
             parent.install_databases(self.name)
+        else:
+            self._session = False
 
         for m in dict(inspect.getmembers(self, inspect.ismethod)).values():
             if not hasattr(m.__func__, "event"): continue # not an event handler
@@ -90,6 +93,11 @@ class Plugin(object):
                 PluginManager.instance.events.addEventHandler(m.__func__.plugin, event, m, priority=priority)
 
         self.setup()
+
+    @property
+    def db(self):
+        if not self._session: return None
+        return self._session()
 
     @staticmethod
     def register(depends=None, uses_db=False, name=None):
