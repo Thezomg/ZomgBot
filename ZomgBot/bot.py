@@ -10,7 +10,7 @@ import signal
 import os
 import string
 from copy import copy
-from time import sleep
+from time import sleep, time
 from ircglob import glob
 
 from ZomgBot.plugins import PluginManager, Modifier
@@ -437,7 +437,7 @@ class ZomgBot(irc.IRCClient):
     def irc_RPL_BANLIST(self, prefix, params):
         channel, banmask, setter, time = params[1:]
         ch = self.getOrCreateChannel(channel)
-        ch._bans.append((banmask, setter, time))
+        ch._bans.append((banmask, setter, int(time)))
 
     def irc_RPL_ENDOFBANLIST(self, prefix, params):
         channel = params[1]
@@ -465,11 +465,17 @@ class ZomgBot(irc.IRCClient):
                 for m in modes:
                     arg = args.pop(0)
                     if m in self.prefixes:
-                        if arg == self.nickname: continue
-                        u = ch.getOrCreateUser(arg)
-                        u.status = u.status.replace(self.prefixes[m], '')
+                        if arg != self.nickname:
+                            u = ch.getOrCreateUser(arg)
+                            u.status = u.status.replace(self.prefixes[m], '')
+                            if _set:
+                                u.status = ''.join(sorted(list(u.status + self.prefixes[m]), key=lambda k: self.priority[k]))
+                    elif m == 'b':
                         if _set:
-                            u.status = ''.join(sorted(list(u.status + self.prefixes[m]), key=lambda k: self.priority[k]))
+                            ch.bans.append((arg, user, time()))
+                        else:
+                            rm = [b for b in ch.bans if b[0] == arg]
+                            [ch.bans.remove(b) for b in rm]
 
                     self.events.dispatchEvent(name="ModeSet" if _set else "ModeCleared",
                                               event=Event(channel=ch, user=ch.getOrCreateUser(user), letter=m, param=arg))
@@ -520,7 +526,8 @@ class ZomgBot(irc.IRCClient):
 
         ch = self._addIRCChannel(channel)
         self.sendLine("WHO :{}".format(channel))
-        self.events.dispatchEvent(name="IJoinChannel", event=ch)
+        self.sendLine("MODE {} +b".format(channel))
+        self.events.dispatchEvent(name="JoinedChannel", event=ch)
         print "Joined %s" % (channel)
 
     def privmsg(self, user, channel, msg):
