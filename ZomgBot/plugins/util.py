@@ -6,7 +6,7 @@ class Util(Plugin):
     def cmd_raw(self, context):
         if not context.args:
             return "Need argument"
-        self.bot.irc.sendLine(' '.join(context.full))
+        self.bot.irc.sendLine(context.full)
 
     @Modifier.command("inject", permission="util.inject")
     def cmd_inject(self, context):
