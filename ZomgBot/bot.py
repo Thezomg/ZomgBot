@@ -383,7 +383,7 @@ class ZomgBot(irc.IRCClient):
         ch = self.getOrCreateChannel(channel)
         status = []
         for mode, (prefix, priority) in self.supported.getFeature("PREFIX", {"o": ("@",0), "v": ("+",1)}).items():
-            if prefix in prefix + nick:
+            if prefix in prefixes + nick:
                 nick = nick.replace(prefix, '')
                 status.append((prefix, priority))
         if nick == self.nickname: return
@@ -394,13 +394,13 @@ class ZomgBot(irc.IRCClient):
     def irc_RPL_NAMREPLY(self, prefix, params):
         users = string.split(params[3])
         for u in users:
-            self.parse_prefixes(params[2], u)
+            self.parse_prefixes(params[2].lower(), u)
 
     def irc_RPL_WHOREPLY(self, prefix, params):
         _, channel, username, host, server, nick, status, hg = params
         if nick == self.nickname: return
         hops, gecos = hg.split(' ', 1)
-        self.parse_prefixes(channel, nick, status[1:].replace('*', ''))
+        self.parse_prefixes(channel.lower(), nick, status[1:].replace('*', ''))
         user = self.getOrCreateUser(nick)
         user.username = username
         user.hostname = host
