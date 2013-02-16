@@ -1,6 +1,7 @@
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
 from twisted.internet.error import ConnectionDone
+from twisted.internet.defer import Deferred
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -207,6 +208,7 @@ class ZomgBot(irc.IRCClient):
         self.capabilities = {}
         self.cap_requests = set()
         self.supports_cap = False
+        self.whoisinfo = {}
 
     # implement capability negotiation from
     # http://ircv3.atheme.org/specification/capability-negotiation-3.1
@@ -402,11 +404,35 @@ class ZomgBot(irc.IRCClient):
     #def irc_unknown(self, prefix, command, params):
         #print "unknown message from IRCserver. prefix: %s, command: %s, params: %s" % (prefix, command, params)
 
+    # whois stuff
+    # The New Way: you do bot.irc.whois("foouser") and get a deferred back, deferred callbacks with a dictionary containing the results
+
+    def whois(self, nickname):
+        nickname = nickname.lower()
+        defer = Deferred()
+
+        if nickname in self.whoisinfo:
+            defers, info = self.whoisinfo[nickname]
+            defers.append(defer)
+            return defer
+        
+        info = {}
+        self.whoisinfo[nickname] = ([defer], info)
+
+        irc.IRCClient.whois(self, nickname, None)
+        return defer
+
     def irc_330(self, prefix, params):
-        self.events.dispatchEvent(name="WhoisAccount", event=Event(user=self.getOrCreateUser(params[1]), account=params[2]))
+        nick, account = params[1].lower(), params[2]
+        if nick in self.whoisinfo:
+            self.whoisinfo[nick][1]["account"] = account
 
     def irc_RPL_ENDOFWHOIS(self, prefix, params):
-        self.events.dispatchEvent(name="WhoisEnd", event=Event(user=self.getOrCreateUser(params[1])))
+        nick = params[1].lower()
+        if nick in self.whoisinfo:
+            defers, info = self.whoisinfo[nick]
+            del self.whoisinfo[nick]
+            [defer.callback(info) for defer in defers]
 
     def irc_RPL_BANLIST(self, prefix, params):
         channel, banmask, setter, time = params[1:]
