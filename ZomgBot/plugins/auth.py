@@ -5,28 +5,13 @@ from twisted.internet.defer import Deferred
 
 @Plugin.register(depends=[])
 class Auth(Plugin):
-    def setup(self):
-        self.needuser = {}
-
-    @EventHandler("WhoisAccount")
-    def whois_event(self, event):
-        event.user.account = event.account
-        print "{} is now authed as {}".format(event.user, event.account)
-        if event.user in self.needuser:
-            print "calling back"
-            self.needuser.pop(event.user).callback(True)
-        else:
-            print "not calling back because {} is not in {}".format(event.user, self.needuser)
-    
-    @EventHandler("WhoisEnd")
-    def whois_end(self, event):
-        if event.user in self.needuser:
-            self.needuser.pop(event.user).callback(False)
+    def whois_done(self, result, event):
+        event.user.account = result.get("account", None)
+        print "{} is now authed as {}".format(event.user, result.get("account", None))
 
     @EventHandler("AuthenticateUser", priority=-10)
     def auth_event(self, event):
         if event.user.account: return True
-        d = Deferred()
-        event.irc.whois(event.user.name)
-        self.needuser[event.user] = d
+        d = event.irc.whois(event.user.name)
+        d.addCallback(self.whois_done, event)
         return d
