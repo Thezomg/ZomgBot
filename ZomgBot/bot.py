@@ -39,6 +39,27 @@ class IRCTarget(object):
     def __unicode__(self):
         return unicode(self.display_name)
 
+
+class PermissionSet(object):
+    def __init__(self):
+        self.permissions = {}
+
+    def add(self, permission, source="?"):
+        self.permissions[permission] = source
+
+    def remove(self, permission):
+        if permission in self.permissions:
+            del self.permissions[permission]
+
+    def has(self, permission):
+        if permission in self.permissions: return True
+        l = []
+        for p in permission.split('.') + ['']:
+            if '.'.join(l + ['*']) in self.permissions: return True
+            l.append(p)
+        return False
+
+
 class IRCUser(IRCTarget):
     account = None
     username = None
@@ -51,39 +72,39 @@ class IRCUser(IRCTarget):
             name, self.username, self.hostname = glob.str_to_tuple(name)
         super(IRCUser, self).__init__(irc, name)
         self.channels = set()
-        self.permissions = set()
-        self.perms_source = {}
+        self.permissions = {}
+        self.base = self
 
     @property
     def hostmask(self):
         if not self.hostname or not self.username: return None
         return '{}!{}@{}'.format(self.name, self.username, self.hostname)
 
-    def add_permission(self, permission, source="?"):
-        self.permissions.add(permission)
-        self.perms_source[permission] = source
-        print "({}): I get permission {} from {}".format(self.name, permission, source)
+    def add_permission(self, permission, source="?", channel=None):
+        if isinstance(channel, basestring):
+            channel = self.irc.getChannel(channel)
+        name = channel.name if channel else "__global__"
+        p = self.permissions.setdefault(name, PermissionSet())
+        p.add(permission, source)
 
-    def remove_permission(self, permission):
-        if permission not in self.permissions: return
-        self.permissions.remove(permission)
-        del self.perms_source[permission]
+    def remove_permission(self, permission, channel=None):
+        if isinstance(channel, basestring):
+            channel = self.irc.getChannel(channel)
+        name = channel.name if channel else "__global__"
+        p = self.permissions.setdefault(name, PermissionSet())
+        p.remove(permission)
 
-    def has_permission(self, permission):
-        if permission in self.permissions: return True
-        l = []
-        for p in permission.split('.') + ['']:  # extra empty string because the last generated string is ignored
-            if '.'.join(l + ['*']) in self.permissions: return True
-            l.append(p)
+    def has_permission(self, permission, channel=None):
+        if isinstance(channel, basestring):
+            channel = self.irc.getChannel(channel)
+        if not permission.startswith('#'):
+            if channel and channel.name in self.permissions:
+                if self.permissions[channel.name].has(permission): return True
+        else:
+            permission = permission[1:]
+        if "__global__" in self.permissions:
+            if self.permissions["__global__"].has(permission): return True
         return False
-    
-    def why(self, permission):
-        if permission in self.permissions: return self.perms_source[permission]
-        l = []
-        for p in permission.split('.') + ['']:  # extra empty string because the last generated string is ignored
-            if '.'.join(l + ['*']) in self.permissions: return self.perms_source['.'.join(l + ['*'])]
-            l.append(p)
-        return "-"
 
     def update_info(self, info):
         info = glob.str_to_tuple(info)
