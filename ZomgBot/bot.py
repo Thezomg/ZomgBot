@@ -180,7 +180,7 @@ class IRCChannel(IRCTarget):
         self._bans = []
 
     def getUser(self, user):
-        nick = self.irc.getNick(user)
+        nick = self.irc.getNick(user).lower()
         u = self.users.get(nick)
         if u:
             u.update_info(user)
@@ -188,7 +188,7 @@ class IRCChannel(IRCTarget):
 
     def _addUser(self, name):
         user = IRCUserInChannel(self.irc.getOrCreateUser(name))
-        if self.irc.getNick(name) != self.irc.nickname: self.users[self.irc.getNick(name)] = user
+        if self.irc.getNick(name) != self.irc.nickname: self.users[self.irc.getNick(name).lower()] = user
         return user
 
     def getOrCreateUser(self, name):
