@@ -132,7 +132,6 @@ class IRCUser(IRCTarget):
         for ch in self.channels:
             ch.users[newnick.lower()] = ch.users[self.name.lower()]
             del ch.users[self.name.lower()]
-        print "updated nick in {} channels: {}".format(len(self.channels), ', '.join(list(n.name for n in self.channels)))
         self.name = newnick
 
 
@@ -140,6 +139,10 @@ class IRCUserInChannel(object):
     def __init__(self, user):
         self.user = user
         self.status = ''
+
+    @property
+    def base(self):
+        return self.user
 
     @property
     def display_name(self):
@@ -294,6 +297,9 @@ class ZomgBot(irc.IRCClient):
     def signedOn(self):
         def join_channels(result):
             map(self.join, self.factory.channels)
+            for line in self.factory.autorun:
+                line = line.format(nick=self.nickname)
+                self.sendLine(line)
         r = self.events.dispatchEvent(name="SignedOn", event=None)
         r.addCallback(join_channels)
         print "Signed on as %s" % (self.nickname,)
@@ -567,14 +573,17 @@ class ZomgBotFactory(protocol.ClientFactory):
     def client(self):
         return self._protocol
 
-    def __init__(self, parent, channels=[], nickname='ZomgBot'):
+    def __init__(self, parent, channels=[], nickname='ZomgBot', username='ZomgBot', autorun=[]):
         self.parent = parent
         self.channels = channels
         self.nickname = nickname
+        self.username = username
+        self.autorun = autorun
 
     def buildProtocol(self, addr):
         p = self.protocol()
         p.nickname = self.nickname
+        p.username = self.username
         p.factory = self
         p.events = self.parent.events
         #p.init()
@@ -628,6 +637,8 @@ class Bot():
         self.port =   cfg["irc"]["port"]
         self.channels = cfg["irc"]["channels"]
         self.nickname = cfg["irc"]["nick"]
+        self.username = cfg["irc"].get("username", "ZomgBot")
+        self.autorun = cfg["irc"].get("autorun", [])
 
         self.config = cfg
 
@@ -640,7 +651,7 @@ class Bot():
         self.plugins.load_plugins("ZomgBot.plugins")
 
     def run(self):
-        self._factory = ZomgBotFactory(self, self.channels, self.nickname)
+        self._factory = ZomgBotFactory(self, self.channels, self.nickname, self.username, self.autorun)
         reactor.connectTCP(self.server, self.port, self._factory)
         reactor.run()
 
