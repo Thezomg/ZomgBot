@@ -268,10 +268,47 @@ class BanManager(Plugin):
                 self.queue_mode(event.channel.name, 'b', False, str(mask))
 
             self.queue_mode(event.channel.name, 'b', True, str(b.banmask))
-            self.queue_kick(event.channel.name, event.user.name, str('Banned by {}'.format(b.banner) + (': {}'.format(b.reason) if b.reason else '')))
+            self.queue_kick(event.channel.name, event.user.name, 'Banned by {}'.format(b.banner) + (': {}'.format(b.reason) if b.reason else ''))
             self.op_me(event.channel)
 
         b.addCallback(inner)
+
+    @EventHandler("UserChangedNick")
+    def on_UserChangingNick(self, event):
+        for channel in event.user.channels:
+            if channel.name not in self.channels: continue
+
+            user = channel.getOrCreateUser(event.user.name)
+        
+            for mask, setter, time in channel.bans:
+                if matches(mask, event.user.hostmask):
+                    def inner(b):
+                        if b:
+                            self.queue_kick(channel.name, user.name, 'Banned by {}'.format(str(b.banner)))
+                        else:
+                            self.queue_kick(channel.name, user.name, 'Banned by {}'.format(setter))
+                        self.op_me(channel)
+                    b = self.find_ban(channel.name, user.hostmask)
+                    b.addCallback(inner)
+                    return
+
+            b = self.find_ban(channel.name, user.hostmask)
+
+            def inner(b):
+                if not b: return
+
+                limit = (self.bot.irc.supported.getFeature("MAXLIST", [(None, 50)])[0][1] / 2)
+                bans = list(sorted(channel.bans, key=lambda t: -t[2]))
+                if len(bans) >= limit:
+                    mask, setter, time = bans[0]
+                    self.track_ban(channel, setter, mask)
+                    self.queue_mode(channel.name, 'b', False, str(mask))
+
+                self.queue_mode(channel.name, 'b', True, str(b.banmask))
+                self.queue_kick(channel.name, user.name, 'Banned by {}'.format(str(b.banner)))
+                self.op_me(channel)
+
+            b.addCallback(inner)
 
     @EventHandler("UserKicked")
     def on_UserKicked(self, event):
