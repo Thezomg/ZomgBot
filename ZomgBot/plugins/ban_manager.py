@@ -229,16 +229,16 @@ class BanManager(Plugin):
                     mask = "*!*@{}".format(u.hostname)
         if '!' not in mask:
             return "{} is neither a nick!user@host mask nor the name of a user on the channel.".format(mask)
-        kb = False
-        for u in context.channel.users.values():
-            if matches(mask, u.hostmask):
-                kb = True
-                self.queue_kick(context.channel.name, u.name, 'Banned by {}'.format(context.user.name) + (': {}'.format(reason) if reason else ''))
-        if kb:
-            self.trim_bans(context.channel, 1)
-            self.queue_mode(context.channel.name, 'b', True, mask)
-            self.op_me(context.channel)
         def inner(banned):
+            kb = False
+            for u in context.channel.users.values():
+                if matches(mask, u.hostmask):
+                    kb = True
+                    self.queue_kick(context.channel.name, u.name, 'Banned by {}'.format(context.user.name) + (': {}'.format(reason) if reason else ''))
+            if kb:
+                self.trim_bans(context.channel, 1)
+                self.queue_mode(context.channel.name, 'b', True, mask)
+                self.op_me(context.channel)
             if banned: return "{} banned successfully.".format(mask)
             elif not kb: return "{} was already banned.".format(mask)
         d = self.track_ban(context.channel, context.user.name, mask, reason)
@@ -252,19 +252,44 @@ class BanManager(Plugin):
         if len(context.args) < 1:
             return "You must specify a mask to unban."
         mask = context.args[0]
-        complain = True
-        if mask in set(b[0] for b in context.channel.bans):
-            self.queue_mode(context.channel.name, 'b', False, str(mask))
-            self.op_me(context.channel)
-            complain = False
-        def inner(removed):
-            if removed:
-                return "Forgot ban for {}.".format(context.args[0])
-            elif complain:
-                return "Mask is not in ban database."
-        d = self.remove_ban(context.args[0], context.channel.name)
-        d.addCallback(inner)
-        return d
+        if '!' in mask:
+            complain = True
+            if mask in set(b[0] for b in context.channel.bans):
+                self.queue_mode(context.channel.name, 'b', False, str(mask))
+                self.op_me(context.channel)
+                complain = False
+            def inner(removed):
+                if removed:
+                    return "Forgot ban for {}.".format(context.args[0])
+                elif complain:
+                    return "Mask is not in ban database."
+            d = self.remove_ban(context.args[0], context.channel.name)
+            d.addCallback(inner)
+            return d
+        else:
+            nick = mask
+            complain = True
+            def inner2(ban):
+                if ban:
+                    self.remove_ban(ban.banmask, context.channel.name)
+                    return "Forgot ban for {}".format(ban.banmask)
+                elif complain:
+                    return "User not banned."
+            def inner(data):
+                if not data:
+                    return "No suck nickname: {}".format(nick)
+                mask = "{0}!{user}@{host}".format(nick, **data)
+                bans = [mask_ for mask_, setter, time in context.channel.bans if matches(mask_, mask)]
+                for b in bans:
+                    complain = False
+                    self.queue_mode(context.channel.name, 'b', False, str(b))
+                if bans: self.op_me(context.channel)
+                f = self.find_ban(context.channel.name, mask)
+                f.addCallback(inner2)
+                return f
+            d = self.bot.irc.whois(mask)
+            d.addCallback(inner)
+            return d
 
     @Modifier.command("showban", permission="bans.showban", chanop=True)
     def cmd_showban(self, context):
