@@ -22,7 +22,7 @@ class CommandContext(object):
     
     def parse_args(self, msg):
         self.args = msg.split(' ')
-        self.full = msg.split(' ', 1)[-1] if len(self.args) > 1 else None
+        self.full = msg.split(' ', 1)[-1] if len(self.args) > 1 else ''
         if len(self.args) >= 2 and self.args[1].startswith('#'):
             channel = self.user.irc.getChannel(self.args[1])
             if channel:
