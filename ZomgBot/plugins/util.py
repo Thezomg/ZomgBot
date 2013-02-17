@@ -33,3 +33,7 @@ class Util(Plugin):
     def cmd_rehash(self, context):
         self.parent.parent.config.loadOrCreate()
         return "Reloaded the configuration file"
+
+    @Modifier.command("quit", permission="util.quit")
+    def cmd_quit(self, context):
+        self.bot.stop(context.full or "Requested")
