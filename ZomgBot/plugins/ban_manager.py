@@ -206,7 +206,9 @@ class BanManager(Plugin):
                 if reason: ban.reason = reason
                 if banner: ban.banner = banner
                 self.db.commit()
-        self.helper.execute(inner)
+                return True
+            return False
+        return self.helper.execute(inner)
 
     def remove_ban(self, mask, channel):
         return self.helper.remove_ban(channel, mask)
@@ -227,7 +229,7 @@ class BanManager(Plugin):
                     mask = "*!*@{}".format(u.hostname)
         if '!' not in mask:
             return "{} is neither a nick!user@host mask nor the name of a user on the channel.".format(mask)
-        kb = True
+        kb = False
         for u in context.channel.users.values():
             if matches(mask, u.hostmask):
                 kb = True
@@ -278,6 +280,23 @@ class BanManager(Plugin):
             return "Ban for {} by {}".format(ban.banmask, ban.banner) + (": {}".format(ban.reason) if ban.reason else "")
         ban.addCallback(inner)
         return ban
+
+    @Modifier.command("updateban", permission="bans.updateban", chanop=True)
+    def cmd_updateban(self, context):
+        if not context.channel:
+            return "Run this command in a channel (or specify a channel name after the command)."
+        if len(context.args) < 1:
+            return "You must specify a mask to update."
+        mask = context.args[0]
+        reason = ' '.join(context.args[1:])
+        d = self.update_ban(mask, reason)
+        def inner(d):
+            if d:
+                return "Updated ban for {}.".format(mask)
+            else:
+                return "Mask is not in ban database."
+        d.addCallback(inner)
+        return d
 
     ### event handlers ###
 
