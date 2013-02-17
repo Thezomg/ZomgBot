@@ -432,10 +432,15 @@ class ZomgBot(irc.IRCClient):
         irc.IRCClient.whois(self, nickname, None)
         return defer
 
+    def irc_RPL_WHOISUSER(self, prefix, params):
+        nick, user, host = params[1].lower(), params[2], params[3]
+        if nick in self.whoisinfo:
+            self.whoisinfo[nick][1].update(user=user, host=host)
+
     def irc_330(self, prefix, params):
         nick, account = params[1].lower(), params[2]
         if nick in self.whoisinfo:
-            self.whoisinfo[nick][1]["account"] = account
+            self.whoisinfo[nick][1].update(account=account)
 
     def irc_RPL_ENDOFWHOIS(self, prefix, params):
         nick = params[1].lower()
