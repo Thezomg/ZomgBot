@@ -342,7 +342,7 @@ class BanManager(Plugin):
                 if matches(mask, event.user.hostmask):
                     def inner(b):
                         if b:
-                            self.queue_kick(channel.name, user.name, 'Banned by {}'.format(str(b.banner)))
+                            self.queue_kick(channel.name, user.name, 'Banned by {}'.format(str(b.banner) + (': {}'.format(b.reason) if b.reason else '')))
                         else:
                             self.queue_kick(channel.name, user.name, 'Banned by {}'.format(setter))
                         self.op_me(channel)
