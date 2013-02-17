@@ -169,24 +169,27 @@ class BanManager(Plugin):
     def find_ban(self, channel, hostmask):
         return self.helper.find_ban(channel, hostmask)
 
-    def _really_track_ban(self, count, channel, user, mask):
-        if count >= 1: return
+    def _really_track_ban(self, count, channel, user, mask, reason):
+        if count >= 1: return False
 
         ban = Ban(time    = datetime.now(),
                   channel = str(channel),
                   banmask = mask,
                   ban_exp = self.glob_to_like_expr(mask),
                   banner  = user,
-                  reason  = '')
+                  reason  = reason)
         self.helper.add_ban(ban)
 
         self.wait.append(mask)
 
         reactor.callLater(5, self._kick_banned, channel, mask, banner=user)
 
-    def track_ban(self, channel, user, mask):
+        return True
+
+    def track_ban(self, channel, user, mask, reason=''):
         d = self.helper.count_bans(channel.name, mask)
-        d.addCallback(self._really_track_ban, channel, user, mask)
+        d.addCallback(self._really_track_ban, channel, user, mask, reason)
+        return d
 
     def update_ban(self, mask, reason=None, banner=None):
         def inner():
@@ -202,10 +205,27 @@ class BanManager(Plugin):
 
     ### commands ###
 
+    @Modifier.command("ban", permission="bans.ban", chanop=True)
+    def cmd_ban(self, context):
+        if not context.channel:
+            return "Run this command in a channel (or specify a channel name after the command)."
+        if len(context.args) < 1:
+            return "You must specify a mask to ban."
+        mask = context.args[0]
+        reason = ' '.join(context.args[1:])
+        def inner(banned):
+            if banned: return "{} banned successfully.".format(mask)
+            else: return "{} was already banned.".format(mask)
+        d = self.track_ban(context.channel, context.user.name, mask, reason)
+        d.addCallback(inner)
+        return d
+
     @Modifier.command("unban", permission="bans.unban", chanop=True)
     def cmd_unban(self, context):
         if not context.channel:
-            return "Can't unban from a query."
+            return "Run this command in a channel (or specify a channel name after the command)."
+        if len(context.args) < 1:
+            return "You must specify a mask to unban."
         mask = context.args[0]
         complain = True
         if mask in set(b[0] for b in context.channel.bans):
@@ -224,7 +244,9 @@ class BanManager(Plugin):
     @Modifier.command("showban", permission="bans.showban", chanop=True)
     def cmd_showban(self, context):
         if not context.channel:
-            return "Can't show bans from a query."
+            return "Run this command in a channel (or specify a channel name after the command)."
+        if len(context.args) < 1:
+            return "You must specify a mask to check."
         mask = context.args[0]
         ban = self.find_ban(context.channel.name, mask)
         def inner(ban):

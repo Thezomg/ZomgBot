@@ -22,7 +22,7 @@ class IRCTarget(object):
         self.name = name
 
     def say(self, msg):
-        self.irc.say(self.name, msg)
+        self.irc.msg(self.name, msg)
 
     def notice(self, msg):
         self.irc.notice(self.name, msg)

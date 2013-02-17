@@ -1,3 +1,4 @@
+from ZomgBot.bot import IRCUserInChannel
 from ZomgBot.plugins import Plugin, Modifier
 from ZomgBot.events import Event, EventHandler
 
@@ -11,27 +12,39 @@ class CommandContext(object):
     def __init__(self, user, channel):
         self.user = user
         self.channel = channel
+        self._real_chan = channel
 
     def reply(self, msg, public=True):
-        if self.channel and public:
-            self.channel.say(msg)
+        if self._real_chan and public:
+            self._real_chan.say(msg)
         else:
             self.user.say(msg)
     
     def parse_args(self, msg):
-        msg = msg[1:]
         self.args = msg.split(' ')
         self.full = msg.split(' ', 1)[-1] if len(self.args) > 1 else None
+        if len(self.args) >= 2 and self.args[1].startswith('#'):
+            channel = self.user.irc.getChannel(self.args[1])
+            if channel:
+                self.channel = channel
+                self.args.pop(1)
         return self.args.pop(0)
 
 
 @Plugin.register(depends=["auth", "permission"])
 class Commands(Plugin):
-    prefix = "/"
+    prefix = ["/"]
 
     def setup(self):
         if "prefix" in self.get_config():
-            self.prefix = self.get_config()["prefix"]
+            self.prefix = map(str.lower, self.get_config()["prefix"])
+
+    @property
+    def prefixes(self):
+        if self.get_config().get("bot_nick_is_prefix", False):
+            return self.prefix + [self.bot.irc.nickname.lower() + s for s in [", ", ": ", " "]]
+        else:
+            return self.prefix
 
     @EventHandler("PluginsLoaded")
     def on_PluginsLoaded(self, event):
@@ -42,26 +55,30 @@ class Commands(Plugin):
             [self.commands.update({n: (cmd, a)}) for n in a.get("aliases", []) + [a["args"][0]]]
 
     def _really_do_command(self, auth_result, name, context):
-        if name in self.commands:
-            cmd, an = self.commands[name]
-            perm = an.get("permission", None)
-            if not perm or context.user.has_permission(perm, context.channel) or (an.get("chanop", False) and context.user.op):
-                context.permission = "global" if not perm or context.user.has_permission(perm) else "channel"
-                try:
-                    result = maybeDeferred(self.commands[name][0].call_with_self, context)
-                    def inner(result):
-                        if isinstance(result, basestring):
-                            context.reply(result)
-                        elif isinstance(result, Sequence):
-                            map(context.reply, result)
-                    result.addCallback(inner)
-                except Exception as e:
-                    logging.exception("Encountered a {} (\"{}\") executing /{}.".format(e.__class__.__name__, str(e), name))
-                    context.reply("Encountered a {} (\"{}\") executing /{}.".format(e.__class__.__name__, str(e), name))
-            else:
-                context.reply("You need the permission {}.".format(perm))
+        if name not in self.commands: return
+
+        cmd, an = self.commands[name]
+
+        if an.get("channel", False) and not context.channel:
+            context.reply("Please run this command in a channel (or specify the channel name as the first argument).")
+            return
+
+        perm = an.get("permission", None)
+        if not perm or context.user.has_permission(perm, context.channel) or (an.get("chanop", False) and isinstance(context.user, IRCUserInChannel) and context.user.op):
+            context.permission = "global" if not perm or context.user.has_permission(perm) else "channel"
+            try:
+                result = maybeDeferred(self.commands[name][0].call_with_self, context)
+                def inner(result):
+                    if isinstance(result, basestring):
+                        context.reply(result)
+                    elif isinstance(result, Sequence):
+                        map(context.reply, result)
+                result.addCallback(inner)
+            except Exception as e:
+                logging.exception("Encountered a {} (\"{}\") executing /{}.".format(e.__class__.__name__, str(e), name))
+                context.reply("Encountered a {} (\"{}\") executing /{}.".format(e.__class__.__name__, str(e), name))
         else:
-            pass # context.reply("No such command, try another one you retard.")
+            context.reply("You need the permission {}.".format(perm))
 
     def do_command(self, name, context):
         r = self.events.dispatchEvent(name="AuthenticateUser", event=Event(user=context.user.base, irc=context.user.irc))
@@ -69,17 +86,21 @@ class Commands(Plugin):
 
     @EventHandler("ChannelMsg")
     def handle_commands(self, event):
-        if not event.message.startswith(self.prefix): return
-        context = CommandContext(event.user, event.channel)
-        command = context.parse_args(event.message)
-        self.do_command(command, context)
+        for prefix in self.prefixes:
+            if not event.message.lower().startswith(prefix): continue
+            context = CommandContext(event.user, event.channel)
+            command = context.parse_args(event.message[len(prefix):])
+            self.do_command(command, context)
+            return
 
     @EventHandler("PrivateMsg")
     def handle_private(self, event):
-        if not event.message.startswith(self.prefix): return
-        context = CommandContext(event.user, None)
-        command = context.parse_args(event.message)
-        self.do_command(command, context)
+        for prefix in self.prefixes:
+            if not event.message.lower().startswith(prefix): continue
+            context = CommandContext(event.user, None)
+            command = context.parse_args(event.message[len(prefix):])
+            self.do_command(command, context)
+            return
 
     @Modifier.command("mystatus")
     def cmd_mystatus(self, context):
