@@ -113,7 +113,7 @@ class BanManager(Plugin):
 
     def _do_modes(self, channel):
         lines = []
-        queue = sorted(self.mode_queue.get(channel, []), key=lambda t:not t[1])
+        queue = sorted(self.mode_queue.get(channel, []), key=lambda t:int(t[1]))
         letters, args = "", []
         cur = None
         count = 0
@@ -156,6 +156,14 @@ class BanManager(Plugin):
         if channel.name not in self.mode_queue and channel.name not in self.line_queue: return
         command = self.get_config().get("op_command", "PRIVMSG ChanServ :OP {channel} {nick}")
         self.bot.irc.sendLine(command.format(channel=channel.name, nick=self.bot.irc.nickname))
+
+    def trim_bans(self, channel, headroom=0):
+        limit = self.bot.irc.supported.getFeature("MAXLIST", [(None, 50)])[0][1] / 2
+        bans = list(sorted(channel.bans, key=lambda t: -t[2]))[limit - headroom:]
+        for mask, setter, time in bans:
+            self.track_ban(channel, setter, mask)
+            self.queue_mode(channel.name, 'b', False, str(mask))
+        return len(bans)
 
     ### database ban tracking ###
 
@@ -213,9 +221,24 @@ class BanManager(Plugin):
             return "You must specify a mask to ban."
         mask = context.args[0]
         reason = ' '.join(context.args[1:])
+        if '!' not in mask:
+            for u in context.channel.users.values():
+                if mask.lower() == u.name.lower():
+                    mask = "*!*@{}".format(u.hostname)
+        if '!' not in mask:
+            return "{} is neither a nick!user@host mask nor the name of a user on the channel.".format(mask)
+        kb = True
+        for u in context.channel.users.values():
+            if matches(mask, u.hostmask):
+                kb = True
+                self.queue_kick(context.channel.name, u.name, 'Banned by {}'.format(context.user.name) + (': {}'.format(reason) if reason else ''))
+        if kb:
+            self.trim_bans(context.channel, 1)
+            self.queue_mode(context.channel.name, 'b', True, mask)
+            self.op_me(context.channel)
         def inner(banned):
             if banned: return "{} banned successfully.".format(mask)
-            else: return "{} was already banned.".format(mask)
+            elif not kb: return "{} was already banned.".format(mask)
         d = self.track_ban(context.channel, context.user.name, mask, reason)
         d.addCallback(inner)
         return d
@@ -282,13 +305,7 @@ class BanManager(Plugin):
         def inner(b):
             if not b: return
 
-            limit = (self.bot.irc.supported.getFeature("MAXLIST", [(None, 50)])[0][1] / 2)
-            bans = list(sorted(event.channel.bans, key=lambda t: -t[2]))
-            if len(bans) >= limit:
-                mask, setter, time = bans[0]
-                self.track_ban(event.channel, setter, mask)
-                self.queue_mode(event.channel.name, 'b', False, str(mask))
-
+            self.trim_bans(event.channel, 1)
             self.queue_mode(event.channel.name, 'b', True, str(b.banmask))
             self.queue_kick(event.channel.name, event.user.name, 'Banned by {}'.format(b.banner) + (': {}'.format(b.reason) if b.reason else ''))
             self.op_me(event.channel)
@@ -319,13 +336,7 @@ class BanManager(Plugin):
             def inner(b):
                 if not b: return
 
-                limit = (self.bot.irc.supported.getFeature("MAXLIST", [(None, 50)])[0][1] / 2)
-                bans = list(sorted(channel.bans, key=lambda t: -t[2]))
-                if len(bans) >= limit:
-                    mask, setter, time = bans[0]
-                    self.track_ban(channel, setter, mask)
-                    self.queue_mode(channel.name, 'b', False, str(mask))
-
+                self.trim_bans(channel, 1)
                 self.queue_mode(channel.name, 'b', True, str(b.banmask))
                 self.queue_kick(channel.name, user.name, 'Banned by {}'.format(str(b.banner)))
                 self.op_me(channel)
@@ -351,11 +362,8 @@ class BanManager(Plugin):
             for mask, setter, time in bans:
                 self.track_ban(event.channel, setter, mask)
             self.seen.add(event.channel.name)
-        bans = bans[limit:]
-        for mask, setter, time in bans:
-            self.track_ban(event.channel, setter, mask)
-            self.queue_mode(event.channel.name, 'b', False, str(mask))
-        if bans: self.op_me(event.channel)
+        
+        if self.trim_bans(event.channel): self.op_me(event.channel)
 
     ### tasks ###
 
