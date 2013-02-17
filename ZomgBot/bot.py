@@ -230,10 +230,10 @@ class ZomgBot(irc.IRCClient):
         return irc.IRCClient.register(self, nickname, hostname, servername)
     
     def lineReceived(self, line):
-        return irc.IRCClient.lineReceived(self, line)
+        return irc.IRCClient.lineReceived(self, line.decode('utf8'))
 
     def sendLine(self, line):
-        return irc.IRCClient.sendLine(self, line)
+        return irc.IRCClient.sendLine(self, line.encode('utf8'))
     
     def _parse_cap(self, cap):
         mod = ''
