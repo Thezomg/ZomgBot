@@ -6,6 +6,7 @@ from datetime import datetime
 import re
 
 from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy.sql.expression import func
 
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
@@ -72,7 +73,10 @@ class ThreadHelper(object):
 
     def remove_ban(self, channel, mask):
         def inner():
-            r = self.db.query(Ban).filter(Ban.banmask == mask).filter(Ban.channel == channel).delete()
+            r = self.db.query(Ban).\
+                filter(func.lower(Ban.banmask) == mask.lower()).\
+                filter(Ban.channel == channel).\
+                delete(synchronize_session='fetch')
             self.db.commit()
             return r > 0
         return self.execute(inner)
@@ -254,7 +258,7 @@ class BanManager(Plugin):
         mask = context.args[0]
         if '!' in mask:
             complain = True
-            if mask in set(b[0] for b in context.channel.bans):
+            if mask.lower() in set(b[0].lower() for b in context.channel.bans):
                 self.queue_mode(context.channel.name, 'b', False, str(mask))
                 self.op_me(context.channel)
                 complain = False
