@@ -1,4 +1,4 @@
-import os, sys, yaml
+import os, sys, yaml, copy
 
 DEFAULT = {
     "irc": {
@@ -22,6 +22,15 @@ class Config(dict):
     def save(self):
         with open(self.filename, 'w') as f:
             yaml.dump(dict(**self), f, default_flow_style=False)
+
+    def threaded_save(self):
+        from twisted.internet import reactor
+        def _save(d):
+            try:
+                with open(self.filename, 'w') as f:
+                    yaml.dump(d, f, default_flow_style=False)
+            except: raise
+        reactor.callInThread(_save, copy.deepcopy(dict(**self)))
 
     def _load(self):
         with open(self.filename, 'r') as f:
