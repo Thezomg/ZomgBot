@@ -143,7 +143,7 @@ class Plugin(object):
         return cfg["plugins"].setdefault(name or self.name, {})
 
     def save_config(self):
-        self.parent.parent.config.save()
+        self.parent.parent.config.threaded_save()
 
 
 class _Annotation(object):
@@ -168,7 +168,7 @@ class _Annotation(object):
             def inner(fn):
                 @wraps(fn)
                 def cc(*args, **kwargs):
-                    return fn(PluginManager.instance.instances[fn.plugin], *args, **kwargs)
+                    return fn.__get__(PluginManager.instance.instances[fn.plugin], fn.plugin)(*args, **kwargs)
                 self.all.setdefault(k, [])
                 self.all[k].append(fn)
                 fn.annotation = getattr(fn, "annotation", {})
