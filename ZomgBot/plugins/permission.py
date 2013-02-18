@@ -2,190 +2,209 @@ from ZomgBot.plugins import Plugin, Modifier
 from ZomgBot.events import EventHandler
 
 from copy import copy
-from itertools import groupby
+from itertools import groupby, chain
+
+class User(object):
+    parent_name = "groups"
+
+    def __init__(self, groupdict):
+        self.permissions = set()
+        self.groups = set()
+        self.groupdict = groupdict
+
+    @classmethod
+    def deserialize(cls, info, groupdict):
+        user = cls(groupdict)
+        for perm in info.get('permissions', []):
+            user.allow(*perm.split('/', 1))
+        for group in info.get(cls.parent_name, []):
+            channel = None
+            if '/' in group:
+                group, channel = group.split('/', 1)
+            if not group: continue
+            user.addtogroup(*group.split('/', 1))
+        return user
+
+    def serialize(self):
+        return {
+                'permissions':     [str(p + '/' + c if c else p) for p, c in self.permissions],
+                 self.parent_name: [str(g + '/' + c if c else g) for g, c in self.groups]
+               }
+
+    @property
+    def empty(self):
+        return not self.groups and not self.permissions
+
+    def allow(self, permission, channel=None):
+        permission, channel = permission.lower(), channel.lower() if channel else None
+        if (permission, channel) in self.permissions: return False
+        self.permissions.add((permission, channel))
+        return True
+
+    def remove(self, permission, channel=None):
+        permission, channel = permission.lower(), channel.lower() if channel else None
+        if (permission, channel) not in self.permissions: return False
+        self.permissions.remove((permission, channel))
+        return True
+
+    def addtogroup(self, group, channel=None):
+        group, channel = group.lower(), channel.lower() if channel else None
+        if (group, channel) in self.groups: return False
+        self.groups.add((group, channel))
+        return True
+
+    def removefromgroup(self, group, channel=None):
+        group, channel = group.lower(), channel.lower() if channel else None
+        if (group, channel) not in self.groups: return False
+        self.groups.remove((group, channel))
+        return True
+
+    def get_permissions(self, channel=None):
+        real_groups = [(self.groupdict.get(g), c) for g, c in self.groups if g in self.groupdict]
+        return [(p, channel or c) for p, c in list(self.permissions) +
+                                   list(chain.from_iterable(g.get_permissions(c) for g, c in real_groups))
+                if channel is None or c is None or c == channel]
+
+class Group(User):
+    parent_name = "parents"
 
 @Plugin.register(depends=None)
 class Permission(Plugin):
     def setup(self):
         self.already_updated = set()
         self.get_config().setdefault("users", {})
-        self.get_config().setdefault("groups", {})
+        self.users = {}
+        self.groups = {}
+        cfg = self.get_config()
+        for n, g in cfg.get("groups", {}).items():
+            self.groups[n] = Group.deserialize(g, self.groups)
 
     def reset(self):
         self.already_updated = set()
 
-    def add_groups(self, user, groupname, stack=None):
-        if stack is None: stack = []
-        if groupname in stack:
-            return False
-        stack.append(groupname)
-
-        cfg = self.get_config()["groups"].setdefault(groupname, {"permissions": [], "parents": []})
-        permissions = cfg["permissions"]
-        parents = cfg.get("parents", [])
-
-        for p in parents:
-            self.add_groups(user, p, stack)
-        for p in permissions:
-            if '/' in p:
-                channel, p = p.split('/', 1)
-            else:
-                channel = None
-            user.add_permission(p, "group:" + groupname, channel)
-
-        stack.pop()
-
-    def refresh_permissions(self, user):
+    def save(self):
+        self.reset()
         cfg = self.get_config()
-        map(user.remove_permission, copy(user.permissions))
-        if user.account in self.parent.parent.config["bot"]["admins"]:
-            user.add_permission("*", "config")
+        cfg["users"] = {}
+        for name, user in self.users.items():
+            if user.empty: continue
+            cfg["users"][str(name)] = user.serialize()
+        cfg["groups"] = {}
+        for name, group in self.groups.items():
+            if group.empty: continue
+            cfg["groups"][str(name)] = group.serialize()
+        self.save_config()
 
-        permissions = cfg["users"].get(user.account, {}).get("permissions", [])
-        for p in permissions:
-            if '/' in p:
-                channel, p = p.split('/', 1)
-            else:
-                channel = None
-            user.add_permission(p, "explicit", channel)
+    def get_user(self, name):
+        if name not in self.users:
+            self.users[name] = User(self.groups)
+        return self.users[name]
 
-        groups = cfg["users"].get(user.account, {}).get("groups", [])
-        for g in groups: self.add_groups(user, g)
+    def get_group(self, name):
+        if name not in self.groups:
+            self.groups[name] = Group(self.groups)
+        return self.groups[name]
 
-        self.already_updated.add(user)
+    def refresh_permissions(self, ircuser):
+        cfg = self.get_config()
+        ircuser.reset_permissions()
+        if ircuser.account in self.parent.parent.config["bot"]["admins"]:
+            ircuser.add_permission("*", "admin")
+
+        user = cfg["users"].get(ircuser.account, None)
+        if not user: return
+        u = User.deserialize(user, self.groups)
+        self.users[ircuser.account] = u
+        for p, c in u.get_permissions():
+            ircuser.add_permission(p, "config", c)
+
+        self.already_updated.add(ircuser)
 
     @EventHandler("AuthenticateUser", priority=-5)
     def authenticating(self, event):
         if event.user in self.already_updated or not event.user.account: return
         self.refresh_permissions(event.user)
 
-    @Modifier.command("groupallow", permission="bot.admin.groupallow")
-    def cmd_groupallow(self, context):
-        assert len(context.args) >= 2
-        perms = context.args
-        group = perms.pop(0)
-        cfg = self.get_config()["groups"].setdefault(group, {"permissions": [], "parents": []})
-        n = 0
-        for p in perms:
-            if context.permission != "global" and not p.startswith(context.channel.name + '/'):
-                p = context.channel.name + '/' + p
-            if p not in cfg["permissions"]:
-               cfg["permissions"].append(p)
-        if n:
-            self.reset()
-            self.save_config()
-            return "Added {} permissions to {}".format(n, group)
-        else:
-            return "Nothing to add."
-
-    @Modifier.command("groupremove", permission="bot.admin.groupremove")
-    def cmd_groupremove(self, context):
-        assert len(context.args) >= 2
-        perms = context.args
-        group = perms.pop(0)
-        cfg = self.get_config()["groups"].get(group, {"permissions": [], "parents": []})
-        n = 0
-        for p in perms:
-            if context.permission != "global" and not p.startswith(context.channel.name + '/'):
-                p = context.channel.name + '/' + p
-            if p in cfg["permissions"]:
-               del cfg["permissions"][p]
-               n += 1
-        if n:
-            self.reset()
-            self.save_config()
-            return "Removed {} permissions from {}".format(n, group)
-        else:
-            return "Nothing to remove."
-
     @Modifier.command("userallow", permission="bot.admin.userallow")
     def cmd_userallow(self, context):
-        assert len(context.args) >= 2
-        perms = context.args
-        username = perms.pop(0)
-        cfg = self.get_config()["users"].setdefault(username, {"permissions": [], "groups": []})
-        n = 0
-        for p in perms:
-            if context.permission != "global" and not p.startswith(context.channel.name + '/'):
-                p = context.channel.name + '/' + p
-            if p not in cfg["permissions"]:
-               cfg["permissions"].append(p)
-               n += 1
-        if n:
-            self.reset()
-            self.save_config()
-            return "Added {} permissions to {}".format(n, username)
+        user, perm = map(str, context.args[:2])
+        if perm.startswith('#') and context.permission == "global":
+            perm = perm[1:]
+            if self.get_user(user).allow(perm):
+                self.save()
+                return "Globally added {} to {}.".format(perm, user)
         else:
-            return "Nothing to add."
+            if self.get_user(user).allow(perm, context.channel.name):
+                self.save()
+                return "Added {} to {} on {}.".format(perm, user, context.channel.name)
+        return "Nothing to add."
 
     @Modifier.command("userremove", permission="bot.admin.userremove")
     def cmd_userremove(self, context):
-        assert len(context.args) >= 2
-        perms = context.args
-        username = perms.pop(0)
-        cfg = self.get_config()["users"].setdefault(username, {"permissions": [], "groups": []})
-        n = 0
-        for p in perms:
-            if context.permission != "global" and not p.startswith(context.channel.name + '/'):
-                p = context.channel.name + '/' + p
-            if p in cfg["permissions"]:
-               del cfg["permissions"][p]
-               n += 1
-        if n:
-            self.reset()
-            self.save_config()
-            return "Removed {} permissions from {}".format(n, username)
+        user, perm = map(str, context.args[:2])
+        if perm.startswith('#') and context.permission == "global":
+            perm = perm[1:]
+            if self.get_user(user).remove(perm):
+                self.save()
+                return "Globally removed {} from {}.".format(perm, user)
         else:
-            return "Nothing to remove."
+            if self.get_user(user).remove(perm, context.channel.name):
+                self.save()
+                return "Removed {} from {} on {}.".format(perm, user, context.channel.name)
+        return "Nothing to remove."
 
-    @Modifier.command("deluser", permission="#bot.admin.deluser")
-    def cmd_deluser(self, context):
-        assert len(context.args) == 1
-        username = context.args[0]
-        cfg = self.get_config()["users"]
-        if username in cfg:
-            del cfg[username]
-            self.reset()
-            self.save_config()
-            return "User deleted: {}".format(username)
+    @Modifier.command("groupallow", permission="bot.admin.groupallow")
+    def cmd_groupallow(self, context):
+        group, perm = map(str, context.args[:2])
+        if perm.startswith('#') and context.permission == "global":
+            perm = perm[1:]
+            if self.get_group(group).allow(perm):
+                self.save()
+                return "Globally added {} to {}.".format(perm, group)
         else:
-            return "No such user: {}".format(username)
+            if self.get_group(group).allow(perm, context.channel.name):
+                self.save()
+                return "Added {} to {} on {}.".format(perm, group, context.channel.name)
+        return "Nothing to add."
 
-    @Modifier.command("delgroup", permission="#bot.admin.delgroup")
-    def cmd_delgroup(self, context):
-        assert len(context.args) == 1
-        group = context.args[0]
-        cfg = self.get_config()["groups"]
-        if group in cfg:
-            del cfg[group]
-            self.reset()
-            self.save_config()
-            return "Group deleted: {}".format(group)
+    @Modifier.command("groupremove", permission="bot.admin.groupremove")
+    def cmd_groupallow(self, context):
+        group, perm = map(str, context.args[:2])
+        if perm.startswith('#') and context.permission == "global":
+            perm = perm[1:]
+            if self.get_group(group).remove(perm):
+                self.save()
+                return "Globally removed {} from {}.".format(perm, group)
         else:
-            return "No such group: {}".format(group)
-
-    @Modifier.command("addtogroup", permission="#bot.admin.addtogroup")
+            if self.get_group(group).remove(perm, context.channel.name):
+                self.save()
+                return "Removed {} from {} on {}.".format(perm, group, context.channel.name)
+        return "Nothing to remove."
+    
+    @Modifier.command("addtogroup", permission="bot.admin.addtogroup")
     def cmd_addtogroup(self, context):
-        group, username = context.args
-        cfg = self.get_config()["users"].setdefault(username, {"permissions": [], "groups": []})
-        if group not in cfg["groups"]:
-            cfg["groups"].append(group)
-            self.reset()
-            self.save_config()
-            return "Added {} to {}".format(username, group)
+        group, user = map(str, context.args[:2])
+        if group.startswith('#') and context.permission == "global":
+            group = group[1:]
+            if self.get_user(user).addtogroup(group):
+                self.save()
+                return "Globally added {} to {}.".format(user, group)
         else:
-            return "{} is already in {}".format(username, group)
-
-    @Modifier.command("removefromgroup", permission="#bot.admin.removefromgroup")
+            if self.get_user(user).addtogroup(group, context.channel.name):
+                self.save()
+                return "Added {} to {} on {}.".format(user, group, context.channel.name)
+        return "Nothing to do."
+    
+    @Modifier.command("removefromgroup", permission="bot.admin.removefromgroup")
     def cmd_removefromgroup(self, context):
-        group, username = context.args
-        cfg = self.get_config()["users"].setdefault(username, {"permissions": [], "groups": []})
-        if group in cfg["groups"]:
-            cfg["groups"].remove(group)
-            self.reset()
-            self.save_config()
-            return "Removed {} from {}".format(username, group)
+        group, user = map(str, context.args[:2])
+        if group.startswith('#') and context.permission == "global":
+            group = group[1:]
+            if self.get_user(user).removefromgroup(group):
+                self.save()
+                return "Globally removed {} from {}.".format(user, group)
         else:
-            return "{} is not in {}".format(username, group)
-        
-
+            if self.get_user(user).removefromgroup(group, context.channel.name):
+                self.save()
+                return "Removed {} from {} on {}.".format(user, group, context.channel.name)
+        return "Nothing to do."
