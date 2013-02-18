@@ -95,6 +95,9 @@ class IRCUser(IRCTarget):
         p = self.permissions.setdefault(name, PermissionSet())
         p.remove(permission)
 
+    def reset_permissions(self):
+        self.permissions = {}
+
     def has_permission(self, permission, channel=None):
         if isinstance(channel, basestring):
             channel = self.irc.getChannel(channel)
