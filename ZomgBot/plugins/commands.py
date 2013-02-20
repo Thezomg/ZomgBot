@@ -41,6 +41,7 @@ class Commands(Plugin):
     prefix = ["/"]
 
     def setup(self):
+        self.commands = {}
         if "prefix" in self.get_config():
             self.prefix = map(str.lower, self.get_config()["prefix"])
 
@@ -57,7 +58,7 @@ class Commands(Plugin):
         self.commands = {}
         for cmd in cmds:
             a = cmd.annotation["command"]
-            [self.commands.update({n: (cmd, a)}) for n in a.get("aliases", []) + [a["args"][0]]]
+            [self.commands.update({n.lower(): (cmd, a)}) for n in a.get("aliases", []) + [a["args"][0]]]
 
     def _really_do_command(self, auth_result, name, context):
         if name not in self.commands: return
