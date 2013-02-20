@@ -18,6 +18,7 @@ class Alias(object):
         tokens = str_.split(" ")
         matches = {}
         for my_tok in self.tokens:
+            assert tokens
             sr_tok = tokens.pop(0)
             if my_tok == "$":
                 if "$" in matches:
@@ -31,6 +32,7 @@ class Alias(object):
                     matches[my_tok] = sr_tok
             else:
                 assert sr_tok.lower() == my_tok.lower()
+        assert len(tokens) == 0
         return matches
     
     def substitute_tokens(self, replacements):
@@ -67,10 +69,14 @@ class Alias(object):
 class AliasPlugin(Plugin):
     def setup(self):
         self.commands = self.parent.get_plugin("commands")
-        self.aliases = {
-            "smite": [Alias("smite $name $", "ban $name $")],
-            "vote": [Alias("vote $name off the island","ban $name loser")]
-        }
+        cfg = self.get_config().get("aliases", [])
+        self.aliases = {}
+        for thing in cfg:
+            try:
+                alias = Alias(thing["match"], thing["replace"])
+                name = alias.tokens[0]
+                self.aliases.setdefault(name, []).append(alias)
+            except: pass
 
     @EventHandler("CommandPreprocess")
     def on_CommandPreprocess(self, event):
