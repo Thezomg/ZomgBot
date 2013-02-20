@@ -318,7 +318,7 @@ class BanManager(Plugin):
             return "You must specify a mask to update."
         mask = context.args[0]
         reason = ' '.join(context.args[1:])
-        d = self.update_ban(mask, reason)
+        d = self.update_ban(mask, reason, context.user.name)
         def inner(d):
             if d:
                 return "Updated ban for {}.".format(mask)
