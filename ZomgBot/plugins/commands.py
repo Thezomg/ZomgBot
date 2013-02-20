@@ -15,6 +15,10 @@ class CommandContext(object):
         self._real_chan = channel
 
     def reply(self, msg, public=True):
+        if '\n' in msg:
+            [self.reply(m, public) for m in msg.split('\n')]
+            return
+        msg = msg.strip()
         if self._real_chan and public:
             self._real_chan.say(msg)
         else:
