@@ -5,7 +5,7 @@ from ZomgBot.events import Event, EventHandler
 from collections import Sequence
 import logging
 
-from twisted.internet.defer import Deferred, maybeDeferred
+from twisted.internet.defer import Deferred, maybeDeferred, inlineCallbacks, returnValue
 
 
 class CommandContext(object):
@@ -90,22 +90,32 @@ class Commands(Plugin):
         r = self.events.dispatchEvent(name="AuthenticateUser", event=Event(user=context.user.base, irc=context.user.irc))
         r.addCallback(self._really_do_command, name, context)
 
+    @inlineCallbacks
+    def _dispatch_command(self, user, command, channel=None):
+        event = Event(user=user, channel=channel, command=command)
+        cancel = not (yield self.events.dispatchEvent(name="CommandPreprocess", event=event))
+        if cancel:
+            return
+        else:
+            self.dispatch_command(user, event.command, channel)
+
+    def dispatch_command(self, user, command, channel=None):
+        context = CommandContext(user, channel)
+        command = context.parse_args(command)
+        self.do_command(command, context)
+
     @EventHandler("ChannelMsg")
     def handle_commands(self, event):
         for prefix in self.prefixes:
             if not event.message.lower().startswith(prefix): continue
-            context = CommandContext(event.user, event.channel)
-            command = context.parse_args(event.message[len(prefix):])
-            self.do_command(command, context)
+            self._dispatch_command(event.user, event.message[len(prefix):], event.channel)
             return
 
     @EventHandler("PrivateMsg")
     def handle_private(self, event):
         for prefix in self.prefixes:
             if not event.message.lower().startswith(prefix): continue
-            context = CommandContext(event.user, None)
-            command = context.parse_args(event.message[len(prefix):])
-            self.do_command(command, context)
+            self._dispatch_command(event.user, event.message[len(prefix):], None)
             return
 
     @Modifier.command("mystatus")
