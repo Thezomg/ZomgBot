@@ -4,7 +4,7 @@ from ZomgBot.events import EventHandler, CancelEvent
 
 class Alias(object):
     def __init__(self, match, replace):
-        self.tokens = match.split(" ")
+        self.tokens = [s.lower() for s in match.split(" ")]
         if "$" in self.tokens:
             assert "$" not in self.tokens[:-1]
         self.replace = [r.lower() if r.startswith("$") else r for r in replace.split(" ")]
@@ -77,6 +77,27 @@ class AliasPlugin(Plugin):
                 name = alias.tokens[0]
                 self.aliases.setdefault(name, []).append(alias)
             except: pass
+
+    def find_alias(self, str_):
+        toks = [s.lower() for s in str_.split(" ")]
+        if toks[0] not in self.aliases: return False
+        for alias in self.aliases[toks[0]]:
+            if alias.tokens == toks:
+                return alias
+        return False
+
+    @Modifier.command("alias", permission="#alias.alias")
+    def cmd_alias(self, context):
+        if "=" in context.full:
+            match, replace = [s.strip() for s in context.full.split("=", 1)]
+        else:
+            match, replace = context.full.strip(), None
+        m = self.find_alias(match)
+        if m:
+            self.aliases[m.tokens[0]].remove(m)
+        if replace:
+            alias = Alias(match, replace)
+            self.aliases.setdefault(alias.tokens[0], []).append(alias)
 
     @EventHandler("CommandPreprocess")
     def on_CommandPreprocess(self, event):
