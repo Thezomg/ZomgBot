@@ -33,6 +33,7 @@ class CommandContext(object):
             if channel:
                 self.channel = channel
                 self.args.pop(1)
+                self.full = self.full.split(' ', 1)[-1]
         return self.args.pop(0)
 
 
