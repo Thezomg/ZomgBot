@@ -168,7 +168,7 @@ class Permission(Plugin):
         return "Nothing to add."
 
     @Modifier.command("groupremove", permission="bot.admin.groupremove")
-    def cmd_groupallow(self, context):
+    def cmd_groupremove(self, context):
         group, perm = map(str, context.args[:2])
         if perm.startswith('#') and context.permission == "global":
             perm = perm[1:]
