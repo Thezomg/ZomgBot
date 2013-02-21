@@ -2,6 +2,7 @@ from ZomgBot.plugins import Plugin, Modifier
 from datetime import datetime
 import socket
 
+
 @Plugin.register(depends=["tasks", "auth", "permission", "matches", "commands"])
 class Minecraft(Plugin):
 

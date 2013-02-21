@@ -1,11 +1,14 @@
 from twisted.internet.defer import maybeDeferred, succeed
 from copy import copy
 
+
 class StopPropagating(Exception):
     pass
 
+
 class CancelEvent(StopPropagating):
     pass
+
 
 class EventDispatcher(object):
     handlers = {}
@@ -55,9 +58,11 @@ class EventDispatcher(object):
     def unregisterHandlers(self, plugin):
         self.handlers = dict((k, [h for h in handlerSet if h[0] != plugin]) for k, handlerSet in self.handlers.items())
 
+
 class Event(dict):
     def __getattr__(self, k):
         return self[k]
+
 
 def EventHandler(event=None, priority=0):
     def inner(fn):

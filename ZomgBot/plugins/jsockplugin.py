@@ -9,6 +9,7 @@ from ZomgBot.events import Event, EventHandler
 logger = logging.getLogger("jsocket")
 logger.setLevel(logging.ERROR)
 
+
 class JSockFactoryThread(jsocket.ServerFactoryThread):
     callback = None
 
@@ -24,6 +25,7 @@ class JSockFactoryThread(jsocket.ServerFactoryThread):
                 if obj['args'] == "":
                     args = []
                 self.callback(obj['function'], args)
+
 
 class ServerFactoryWithCallback(jsocket.ServerFactory):
     callback = None
@@ -50,6 +52,7 @@ class ServerFactoryWithCallback(jsocket.ServerFactory):
                     break
         self._wait_to_exit()
         self.close()
+
 
 @Plugin.register(depends=["commands"])
 class JSockPlugin(Plugin):
