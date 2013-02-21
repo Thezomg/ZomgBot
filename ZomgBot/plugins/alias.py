@@ -15,7 +15,7 @@ class Alias(object):
         """
         Match `str_` against this Alias, returning a dict of $tokens and their replacements.
         """
-        tokens = str_.split(" ")
+        tokens = [s for s in str_.split(" ") if s]
         matches = {}
         for my_tok in self.tokens:
             assert tokens
