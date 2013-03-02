@@ -9,7 +9,7 @@ from sqlalchemy import Column, DateTime, Integer, String, Text
 from sqlalchemy.sql.expression import func
 
 from twisted.internet import reactor
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred, inlineCallbacks, returnValue
 
 
 Base = Plugin.declarative_base("ban_manager")
@@ -158,80 +158,81 @@ class BanManager(Plugin):
     ### commands ###
 
     @Modifier.command("ban", permission="bans.ban", chanop=True)
+    @inlineCallbacks
     def cmd_ban(self, context):
         if not context.channel:
-            return "Run this command in a channel (or specify a channel name after the command)."
+            returnValue("Run this command in a channel (or specify a channel name after the command).")
         if len(context.args) < 1:
-            return "You must specify a mask to ban."
+            returnValue("You must specify a mask to ban.")
         mask = context.args[0]
         reason = ' '.join(context.args[1:])
+
         if '!' not in mask:
             for u in context.channel.users.values():
                 if mask.lower() == u.name.lower():
                     mask = "*!*@{}".format(u.hostname)
         if '!' not in mask:
-            return "{} is neither a nick!user@host mask nor the name of a user on the channel.".format(mask)
-        def inner(banned):
-            kb = False
-            for u in context.channel.users.values():
-                if matches(mask, u.hostmask):
-                    kb = True
-                    self.queue_kick(context.channel.name, u.name, 'Banned by {}'.format(context.user.name) + (': {}'.format(reason) if reason else ''))
-            if kb:
-                self.trim_bans(context.channel, 1)
-                self.queue_mode(context.channel.name, 'b', True, mask)
-                self.op_me(context.channel)
-            if banned: return "{} banned successfully.".format(mask)
-            elif not kb: return "{} was already banned.".format(mask)
-        d = self.track_ban(context.channel, context.user.name, mask, reason)
-        d.addCallback(inner)
-        return d
+            returnValue("{} is neither a nick!user@host mask nor the name of a user on the channel.".format(mask))
+
+        banned = yield self.track_ban(context.channel, context.user.name, mask, reason)
+        kb = False
+        for u in context.channel.users.values():
+            if matches(mask, u.hostmask):
+                kb = True
+                self.op.kick(context.channel.name, u.name, 'Banned by {}'.format(context.user.name) + (': {}'.format(reason) if reason else ''))
+
+        if kb:
+            self.trim_bans(context.channel, 1)
+            self.op.mode(context.channel.name, 'b', True, mask)
+            self.op.run_queue(context.channel)
+        else:
+            if banned:
+                returnValue("{} banned successfully.".format(mask))
+            else:
+                returnValue("{} was already banned.".format(mask))
 
     @Modifier.command("unban", permission="bans.unban", chanop=True)
+    @inlineCallbacks
     def cmd_unban(self, context):
         if not context.channel:
-            return "Run this command in a channel (or specify a channel name after the command)."
+            returnValue("Run this command in a channel (or specify a channel name after the command).")
         if len(context.args) < 1:
-            return "You must specify a mask to unban."
+            returnValue("You must specify a mask to unban.")
+
         mask = context.args[0]
         if '!' in mask:
             complain = True
             if mask.lower() in set(b[0].lower() for b in context.channel.bans):
-                self.queue_mode(context.channel.name, 'b', False, str(mask))
-                self.op_me(context.channel)
+                self.op.mode(context.channel.name, 'b', False, str(mask))
+                self.op.run_queue(context.channel)
                 complain = False
-            def inner(removed):
+            removed = yield self.remove_ban(context.args[0], context.channel.name)
+            if complain:
                 if removed:
-                    return "Forgot ban for {}.".format(context.args[0])
-                elif complain:
-                    return "Mask is not in ban database."
-            d = self.remove_ban(context.args[0], context.channel.name)
-            d.addCallback(inner)
-            return d
+                    returnValue("Forgot ban for {}.".format(context.args[0]))
+                else:
+                    returnValue("Mask is not in ban database.")
         else:
             nick = mask
             complain = True
-            def inner2(ban):
-                if ban:
-                    self.remove_ban(ban.banmask, context.channel.name)
-                    return "Forgot ban for {}".format(ban.banmask)
-                elif complain:
-                    return "User not banned."
-            def inner(data):
-                if not data:
-                    return "No suck nickname: {}".format(nick)
-                mask = "{0}!{user}@{host}".format(nick, **data)
-                bans = [mask_ for mask_, setter, time in context.channel.bans if matches(mask_, mask)]
-                for b in bans:
-                    complain = False
-                    self.queue_mode(context.channel.name, 'b', False, str(b))
-                if bans: self.op_me(context.channel)
-                f = self.find_ban(context.channel.name, mask)
-                f.addCallback(inner2)
-                return f
-            d = self.bot.irc.whois(mask)
-            d.addCallback(inner)
-            return d
+
+            data = yield self.bot.irc.whois(mask)
+            if not data:
+                returnValue("No suck nickname: {}".format(nick))
+            mask = "{0}!{user}@{host}".format(nick, **data)
+            bans = [mask_ for mask_, setter, time in context.channel.bans if matches(mask_, mask)]
+            for b in bans:
+                complain = False
+                self.op.mode(context.channel.name, 'b', False, str(b))
+            if bans: self.op.run_queue(context.channel)
+
+            ban = yield self.find_ban(context.channel.name, mask)
+            if ban:
+                self.remove_ban(ban.banmask, context.channel.name)
+                if complain:returnValue("Forgot ban for {}.".format(ban.banmask))
+            elif complain:
+                returnValue("User not banned.")
+
 
     @Modifier.command("showban", permission="bans.showban", chanop=True)
     def cmd_showban(self, context):
