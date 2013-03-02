@@ -82,7 +82,7 @@ class ThreadHelper(object):
         return self.execute(inner)
 
 
-@Plugin.register(depends=["commands", "tasks"], uses_db=True)
+@Plugin.register(depends=["commands", "op", "tasks"], uses_db=True)
 class BanManager(Plugin):
     refresh_required = False
 
@@ -91,10 +91,7 @@ class BanManager(Plugin):
         self.wait = []
         self.seen = set()
         self.channels = set(s.lower() for s in self.get_config().get("channels", []))
-        self.mode_queue = {}
-        self.line_queue = {}
-        self.op = set()
-        self.deop = {}
+        self.op = self.parent.get_plugin("op")
 
     ### general helper ###
 
@@ -102,71 +99,12 @@ class BanManager(Plugin):
     def glob_to_like_expr(pattern):
         return pattern.replace('*', '%').replace('?', '_')
 
-    ### Op action managemnt ###
-
-    def queue_line(self, channel, line):
-        l = self.line_queue.setdefault(channel, [])
-        l.append(line)
-    
-    def queue_kick(self, channel, user, reason):
-        self.queue_line(channel, "KICK {} {} :{}".format(channel, user, reason))
-
-    def queue_mode(self, channel, letter, set_, arg=None):
-        l = self.mode_queue.setdefault(channel, [])
-        l.append((letter, set_, arg))
-
-    def _do_modes(self, channel):
-        lines = []
-        queue = sorted(self.mode_queue.get(channel, []), key=lambda t:int(t[1]))
-        letters, args = "", []
-        cur = None
-        count = 0
-        for letter, set_, arg in queue:
-            if set_ != cur:
-                cur = set_
-                letters += "+" if set_ else "-"
-            letters += letter
-            if arg: args.append(arg)
-            count += 1
-            if count >= 4:
-                lines.append("MODE {} {} {}".format(channel, letters, " ".join(args)))
-                letters, args = "", []
-                cur = None
-                count = 0
-        if count:
-            lines.append("MODE {} {} {}".format(channel, letters, " ".join(args)))
-        del self.mode_queue[channel]
-        map(self.bot.irc.sendLine, lines)
-
-    def _do_deop(self, channel):
-        if channel in self.deop: del self.deop[channel]
-        self.op.remove(channel)
-        self.bot.irc.mode(str(channel), False, 'o', user=self.bot.irc.nickname)
-
-    def _got_op(self, channel):
-        if channel in self.mode_queue:
-            self._do_modes(channel)
-        if channel in self.line_queue:
-            map(self.bot.irc.sendLine, self.line_queue[channel])
-            del self.line_queue[channel]
-        if channel in self.deop:
-            self.deop[channel].reset(30)
-        else:
-            self.deop[channel] = reactor.callLater(30, self._do_deop, channel)
-
-    def op_me(self, channel):
-        if channel.name in self.op:
-            return self._got_op(channel.name)
-        if channel.name not in self.mode_queue and channel.name not in self.line_queue: return
-        command = self.get_config().get("op_command", "PRIVMSG ChanServ :OP {channel} {nick}")
-        self.bot.irc.sendLine(command.format(channel=channel.name, nick=self.bot.irc.nickname))
-
     def trim_bans(self, channel, headroom=0):
         limit = self.bot.irc.supported.getFeature("MAXLIST", [(None, 50)])[0][1] / 2
         bans = list(sorted(channel.bans, key=lambda t: -t[2]))[limit - headroom:]
         for mask, setter, time in bans:
             self.track_ban(channel, setter, mask)
-            self.queue_mode(channel.name, 'b', False, str(mask))
+            self.op.mode(channel.name, 'b', False, str(mask))
         return len(bans)
 
     ### database ban tracking ###
@@ -174,8 +112,8 @@ class BanManager(Plugin):
     def _kick_banned(self, channel, mask, banner, reason=None):
         for name, user in channel.users.items():
             if matches(mask, user.hostmask):
-                self.queue_kick(str(channel), user.name, 'Banned by {}'.format(banner) + (': {}'.format(reason) if reason else ''))
-        self.op_me(channel)
+                self.op.kick(str(channel), user.name, 'Banned by {}'.format(banner) + (': {}'.format(reason) if reason else ''))
+        self.op.run_queue(channel)
         self.wait.remove(mask)
 
     def find_ban(self, channel, hostmask):
@@ -332,10 +270,6 @@ class BanManager(Plugin):
     @EventHandler("ModeSet")
     def on_ModeSet(self, event):
         if event.channel.name not in self.channels: return
-        if event.letter == 'o' and event.param == self.bot.irc.nickname:
-            self.op.add(event.channel.name)
-            self._got_op(event.channel.name)
-            return
         if event.letter != 'b': return
         self.track_ban(event.channel, event.user.name, event.param)
 
@@ -354,9 +288,9 @@ class BanManager(Plugin):
             if not b: return
 
             self.trim_bans(event.channel, 1)
-            self.queue_mode(event.channel.name, 'b', True, str(b.banmask))
-            self.queue_kick(event.channel.name, event.user.name, 'Banned by {}'.format(b.banner) + (': {}'.format(b.reason) if b.reason else ''))
-            self.op_me(event.channel)
+            self.op.mode(event.channel.name, 'b', True, str(b.banmask))
+            self.op.kick(event.channel.name, event.user.name, 'Banned by {}'.format(b.banner) + (': {}'.format(b.reason) if b.reason else ''))
+            self.op.run_queue(event.channel)
 
         b.addCallback(inner)
 
@@ -371,10 +305,10 @@ class BanManager(Plugin):
                 if matches(mask, event.user.hostmask):
                     def inner(b):
                         if b:
-                            self.queue_kick(channel.name, user.name, 'Banned by {}'.format(str(b.banner) + (': {}'.format(b.reason) if b.reason else '')))
+                            self.op.kick(channel.name, user.name, 'Banned by {}'.format(str(b.banner) + (': {}'.format(b.reason) if b.reason else '')))
                         else:
-                            self.queue_kick(channel.name, user.name, 'Banned by {}'.format(setter))
-                        self.op_me(channel)
+                            self.op.kick(channel.name, user.name, 'Banned by {}'.format(setter))
+                        self.op.run_queue(channel)
                     b = self.find_ban(channel.name, user.hostmask)
                     b.addCallback(inner)
                     return
@@ -385,9 +319,9 @@ class BanManager(Plugin):
                 if not b: return
 
                 self.trim_bans(channel, 1)
-                self.queue_mode(channel.name, 'b', True, str(b.banmask))
-                self.queue_kick(channel.name, user.name, 'Banned by {}'.format(str(b.banner)))
-                self.op_me(channel)
+                self.op.mode(channel.name, 'b', True, str(b.banmask))
+                self.op.kick(channel.name, user.name, 'Banned by {}'.format(str(b.banner)))
+                self.op.run_queue(channel)
 
             b.addCallback(inner)
 
@@ -411,7 +345,7 @@ class BanManager(Plugin):
                 self.track_ban(event.channel, setter, mask)
             self.seen.add(event.channel.name)
         
-        if self.trim_bans(event.channel): self.op_me(event.channel)
+        if self.trim_bans(event.channel): self.op.run_queue(event.channel)
 
     ### tasks ###
 
