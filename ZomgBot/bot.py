@@ -1,7 +1,8 @@
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
-from twisted.internet.error import ConnectionDone
 from twisted.internet.defer import Deferred
+from twisted.internet.error import ConnectionDone
+from twisted.internet.task import LoopingCall
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -31,6 +32,7 @@ class ZomgBot(UsertrackingClient, irc.IRCClient):
         self.cap_requests = set()
         self.supports_cap = False
         self.whoisinfo = {}
+        self.who_queue = []
 
     # implement capability negotiation from
     # http://ircv3.atheme.org/specification/capability-negotiation-3.1
@@ -42,6 +44,8 @@ class ZomgBot(UsertrackingClient, irc.IRCClient):
 
     def connectionMade(self):
         self.events.dispatchEvent(name="Connected", event=None)
+        self.who_cycle = LoopingCall(self.who_next_channel)
+        self.who_cycle.start(10, False)
         return irc.IRCClient.connectionMade(self)
 
     def register(self, nickname, hostname='foo', servername='bar'):
@@ -212,15 +216,25 @@ class ZomgBot(UsertrackingClient, irc.IRCClient):
     def supports_whox(self):
         return self.supported.hasFeature("WHOX")
 
+    def who(self, channel):
+        if self.supports_whox():
+            self.sendLine("WHO {} %cuhsnfar".format(channel))
+        else:
+            self.sendLine("WHO {}".format(channel))
+
+    def who_next_channel(self):
+        if not self.who_queue:
+            self.who_queue = [str(c.name) for c in self.channels.values()]
+        if self.who_queue:
+            c = self.who_queue.pop(0)
+            self.who(c)
+
     def joined(self, channel):
         if self.channels.has_key(channel.lower()):
             del self.channels[channel.lower()]
 
         ch = self._addIRCChannel(channel)
-        if self.supports_whox():
-            self.sendLine("WHO {} %cuhsnfar".format(channel))
-        else:
-            self.sendLine("WHO {}".format(channel))
+        self.who(channel)
         self.sendLine("MODE {} +b".format(channel))
         self.events.dispatchEvent(name="JoinedChannel", event=ch)
         print "Joined %s" % (channel)
