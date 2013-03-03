@@ -1,6 +1,9 @@
 from ZomgBot.ircglob import glob
 from ZomgBot.events import Event
 
+from time import sleep, time
+from copy import copy
+
 
 class IRCTarget(object):
     def __init__(self, irc, name):
