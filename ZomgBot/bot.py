@@ -53,7 +53,7 @@ class ZomgBot(UsertrackingClient, irc.IRCClient):
         return irc.IRCClient.register(self, nickname, hostname, servername)
     
     def lineReceived(self, line):
-        return irc.IRCClient.lineReceived(self, line.decode('utf8'))
+        return irc.IRCClient.lineReceived(self, line.decode('utf8', errors='replace'))
 
     def sendLine(self, line):
         return irc.IRCClient.sendLine(self, line.encode('utf8'))
