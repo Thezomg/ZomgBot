@@ -1,6 +1,8 @@
 from ZomgBot.plugins import Plugin, Modifier
 from ZomgBot.events import EventHandler, CancelEvent
 
+from itertools import chain
+
 
 class Alias(object):
     def __init__(self, match, replace):
@@ -64,6 +66,10 @@ class Alias(object):
         except AssertionError:
             return False
 
+    @property
+    def thing(self):
+        return {"match": str(" ".join(self.tokens)), "replace": str(" ".join(self.replace))}
+
 
 @Plugin.register(depends=["commands"])
 class AliasPlugin(Plugin):
@@ -77,6 +83,11 @@ class AliasPlugin(Plugin):
                 name = alias.tokens[0]
                 self.aliases.setdefault(name, []).append(alias)
             except: pass
+
+    def save(self):
+        cfg = [a.thing for a in chain(*self.aliases.values())]
+        self.get_config()["aliases"] = cfg
+        self.save_config()
 
     def find_alias(self, str_):
         toks = [s.lower() for s in str_.split(" ")]
@@ -98,6 +109,7 @@ class AliasPlugin(Plugin):
         if replace:
             alias = Alias(match, replace)
             self.aliases.setdefault(alias.tokens[0], []).append(alias)
+        self.save()
 
     @EventHandler("CommandPreprocess")
     def on_CommandPreprocess(self, event):
