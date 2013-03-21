@@ -31,7 +31,10 @@ class PluginManager(object):
         modpath = path.join(os.curdir, *package.split('.') + ['*.py'])
         for mod in glob(modpath):
             if path.basename(mod).startswith("__init__."): continue
-            m = imp.load_source(path.splitext(path.basename(mod))[0], mod)
+            try:
+                m = imp.load_source(path.splitext(path.basename(mod))[0], mod)
+            except Exception as e:
+                print "Encountered {} loading {}".format(e, mod)
         self.ordered_enable(*self.parent.config["bot"]["plugins"])
         self.events.dispatchEvent(name="PluginsLoaded", event=None)
         print self.instances
