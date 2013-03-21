@@ -132,7 +132,8 @@ class BanManager(Plugin):
 
         self.wait.append(mask)
 
-        reactor.callLater(5, self._kick_banned, channel, mask, banner=user)
+        if self.get_config().get("no_kick_on_banned", False):
+            reactor.callLater(5, self._kick_banned, channel, mask, banner=user)
 
         return True
 
