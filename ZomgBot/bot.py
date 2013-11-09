@@ -125,7 +125,8 @@ class ZomgBot(UsertrackingClient, irc.IRCClient):
                 self.sendLine(line)
         r = self.events.dispatchEvent(name="SignedOn", event=None)
         r.addCallback(join_channels)
-        print "Signed on as %s" % (self.nickname,)
+        print "Signed on as {0}".format(self.nickname)
+        return irc.IRCClient.signedOn(self)
 
     def send_message(self, channel, message, length=None):
         message = str(message)
